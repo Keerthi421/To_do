@@ -7,6 +7,7 @@ import {
   RefreshCw, Headphones, LayoutGrid, ChevronUp, Paperclip, Pin, CheckCircle2
 } from 'lucide-react';
 import './styles.css';
+import './history.css';
 
 const initialTasks = [
   { id: 1, title: 'To-do app completion', date: 'today', time: '', list: 'Personal', tag: '', priority: 'none', pinned: false, done: false },
