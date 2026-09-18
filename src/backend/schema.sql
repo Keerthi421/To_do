@@ -52,6 +52,7 @@ create index if not exists tasks_user_due_idx on tasks(user_id, due_at);
 create index if not exists tasks_user_completed_idx on tasks(user_id, completed, created_at desc);
 create index if not exists tasks_user_updated_idx on tasks(user_id, updated_at desc);
 create index if not exists tasks_active_idx on tasks(user_id, completed) where deleted_at is null;
+create index if not exists tasks_user_deleted_idx on tasks(user_id, deleted_at, created_at desc);
 create index if not exists subtasks_task_position_idx on subtasks(task_id, position);
 create index if not exists attachments_task_idx on task_attachments(task_id);
 
@@ -73,7 +74,6 @@ create policy "task tags through own task" on task_tags for all using (exists (s
 create policy "attachments through own task" on task_attachments for all using (exists (select 1 from tasks where tasks.id = task_attachments.task_id and tasks.user_id = auth.uid())) with check (exists (select 1 from tasks where tasks.id = task_attachments.task_id and tasks.user_id = auth.uid()));
 create policy "calendar own rows" on calendar_connections for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- Automatically create a profile when a new Supabase Auth user signs up.
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public
 as $$
@@ -88,6 +88,24 @@ $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure public.handle_new_user();
+
+-- Keep updated_at reliable for every edit, including edits made outside the UI.
+create or replace function public.set_updated_at() returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists tasks_set_updated_at on public.tasks;
+create trigger tasks_set_updated_at before update on public.tasks
+for each row execute procedure public.set_updated_at();
+
+drop trigger if exists subtasks_set_updated_at on public.subtasks;
+create trigger subtasks_set_updated_at before update on public.subtasks
+for each row execute procedure public.set_updated_at();
 
 -- Enable realtime for task synchronization when this SQL is run in Supabase.
 alter table tasks replica identity full;
