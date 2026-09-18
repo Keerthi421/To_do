@@ -4,6 +4,7 @@ import { supabaseEnabled } from './backend/supabase';
 
 const KEY = 'anyday.tasks';
 const readLocal = () => { try { const value = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
+const writeLocal = tasks => localStorage.setItem(KEY, JSON.stringify(tasks));
 
 export default function CloudShell({ children }) {
   const [session, setSession] = useState(null);
@@ -32,36 +33,40 @@ export default function CloudShell({ children }) {
     const remote = await loadTasks();
     const local = readLocal();
     if (remote?.length) {
-      localStorage.setItem(KEY, JSON.stringify(remote));
+      writeLocal(remote);
     } else if (local.length) {
-      for (const task of local) {
-        try { const saved = await insertTask(task, userId); if (saved) known.current.set(String(task.id), saved.id); } catch { /* keep local fallback */ }
+      // Never seed a fresh account with the built-in demo tasks.
+      const demoOnly = local.every(task => typeof task.id === 'number');
+      if (demoOnly) {
+        writeLocal([]);
+      } else {
+        for (const task of local) {
+          try {
+            const saved = await insertTask(task, userId);
+            if (saved) known.current.set(String(task.id), saved);
+          } catch { /* keep local fallback */ }
+        }
+        const refreshed = await loadTasks();
+        if (refreshed) writeLocal(refreshed);
       }
-      const refreshed = await loadTasks();
-      if (refreshed) localStorage.setItem(KEY, JSON.stringify(refreshed));
     }
     known.current = new Map(readLocal().map(t => [String(t.id), t]));
+    window.dispatchEvent(new CustomEvent('anyday:remote-change'));
   }
 
   useEffect(() => {
     if (!session) return;
-    const unsubscribe = subscribeToTasks(session.user.id, async payload => {
-      if (payload.eventType === 'DELETE') return;
-      const current = readLocal();
-      const remote = payload.new;
-      if (!remote) return;
-      const next = {
-        id: remote.id, title: remote.title, notes: remote.notes || '',
-        date: remote.due_at ? remote.due_at.slice(0, 10) : 'upcoming',
-        time: remote.due_at ? new Date(remote.due_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '',
-        list: remote.list_id || 'Personal', tag: '',
-        priority: ({0:'none',1:'low',2:'medium',3:'high'})[remote.priority] || 'none',
-        pinned: Boolean(remote.pinned), done: Boolean(remote.completed),
-        createdAt: remote.created_at, updatedAt: remote.updated_at, completedAt: remote.completed_at
-      };
-      const without = current.filter(t => String(t.id) !== String(next.id));
-      localStorage.setItem(KEY, JSON.stringify([next, ...without]));
-      window.dispatchEvent(new CustomEvent('anyday:remote-change'));
+    const unsubscribe = subscribeToTasks(session.user.id, async () => {
+      // Re-read the complete row shape instead of reconstructing it from the
+      // realtime payload. This keeps list names, reminders and recurrence data intact.
+      try {
+        const remote = await loadTasks();
+        if (remote) {
+          writeLocal(remote);
+          known.current = new Map(remote.map(t => [String(t.id), t]));
+          window.dispatchEvent(new CustomEvent('anyday:remote-change'));
+        }
+      } catch (e) { setError(e.message); }
     });
     return unsubscribe;
   }, [session]);
@@ -78,21 +83,21 @@ export default function CloudShell({ children }) {
           const old = previous.get(String(task.id));
           if (!old) {
             const saved = await insertTask(task, session.user.id);
-            if (saved && String(saved.id) !== String(task.id)) {
+            if (saved) {
               const replaced = readLocal().map(t => String(t.id) === String(task.id) ? saved : t);
-              localStorage.setItem(KEY, JSON.stringify(replaced));
+              writeLocal(replaced);
             }
           } else if (JSON.stringify(old) !== JSON.stringify(task)) {
             await updateTaskRemote(task.id, task);
           }
         }
-        for (const [id, old] of previous) {
+        for (const [id] of previous) {
           if (!current.some(t => String(t.id) === String(id))) await softDeleteTask(id);
         }
         known.current = new Map(readLocal().map(t => [String(t.id), t]));
       } catch (e) { setError(e.message); }
       finally { syncing.current = false; }
-    }, 1500);
+    }, 5000);
     return () => clearInterval(timer);
   }, [session]);
 
