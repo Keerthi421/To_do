@@ -2,103 +2,133 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp,
-  Clock3, Ellipsis, Filter, Flag, Folder, Inbox, LayoutGrid, ListChecks, Menu,
-  MoreHorizontal, Plus, Search, Settings, Sparkles, Tag, Target, Trash2, X, Zap
+  Clock3, Ellipsis, Filter, Flag, Folder, Inbox, Menu, MoreHorizontal, Plus,
+  Search, Settings, Sparkles, Tag, Target, Trash2, X, Zap, SlidersHorizontal,
+  RefreshCw, Headphones, LayoutGrid, ChevronUp, Paperclip, Pin, CheckCircle2
 } from 'lucide-react';
 import './styles.css';
 
-const seedTasks = [
-  { id: 1, title: 'Finish system design notes', date: 'today', time: '10:30 AM', list: 'Personal', tag: 'Work', priority: 'high', pinned: true, subtasks: 3, done: false },
-  { id: 2, title: 'Review pull request', date: 'today', time: '1:00 PM', list: 'Work', tag: 'Work', priority: 'medium', pinned: false, subtasks: 0, done: false },
-  { id: 3, title: 'Go for a 30 minute walk', date: 'today', time: '6:30 PM', list: 'Personal', tag: 'Health', priority: 'low', pinned: false, subtasks: 0, done: false },
-  { id: 4, title: 'Prepare tomorrow\'s interview plan', date: 'tomorrow', time: '9:00 AM', list: 'Personal', tag: 'Important', priority: 'high', pinned: false, subtasks: 2, done: false },
-  { id: 5, title: 'Buy groceries', date: 'tomorrow', time: '', list: 'Groceries', tag: '', priority: 'none', pinned: false, subtasks: 0, done: false },
-  { id: 6, title: 'Read 20 pages', date: 'upcoming', time: '', list: 'Personal', tag: 'Personal', priority: 'none', pinned: false, subtasks: 0, done: false },
+const initialTasks = [
+  { id: 1, title: 'To-do app completion', date: 'today', time: '', list: 'Personal', tag: '', priority: 'none', pinned: false, done: false },
+  { id: 2, title: 'check all the projects to be deployed', date: 'today', time: '', list: 'Personal', tag: '', priority: 'none', pinned: false, done: false },
+  { id: 3, title: 'New System design now', date: 'today', time: '', list: 'Personal', tag: '', priority: 'none', pinned: false, done: false },
+  { id: 4, title: 'Yesterdays System Design', date: 'today', time: '', list: 'Personal', tag: '', priority: 'none', pinned: false, done: false },
+  { id: 5, title: 'Finish resume updates', date: 'today', time: '4:00 PM', list: 'Personal', tag: 'Work', priority: 'high', pinned: true, done: false },
+  { id: 6, title: 'Review tomorrow interview plan', date: 'tomorrow', time: '9:00 AM', list: 'Personal', tag: '', priority: 'medium', pinned: false, done: false },
+  { id: 7, title: 'Buy groceries', date: 'upcoming', time: '', list: 'Personal', tag: '', priority: 'none', pinned: false, done: false },
 ];
 
+const lists = ['Personal', 'Work'];
+const tags = ['Important', 'Work', 'Personal', 'Health'];
 const navItems = [
-  ['myday', 'My Day', Target], ['next7', 'Next 7 Days', CalendarDays], ['all', 'All Tasks', ListChecks], ['calendar', 'Calendar', CalendarDays]
+  ['myday', 'My day', Target],
+  ['next7', 'Next 7 days', CalendarDays],
+  ['all', 'All my tasks', Inbox],
+  ['calendar', 'My Calendar', CalendarDays],
 ];
 
-function formatDate() {
-  return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
-}
+const todayLabel = () => new Intl.DateTimeFormat('en-US', { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date());
 
 function App() {
-  const [tasks, setTasks] = useState(() => JSON.parse(localStorage.getItem('anyday.tasks') || 'null') || seedTasks);
+  const [tasks, setTasks] = useState(() => JSON.parse(localStorage.getItem('anyday.tasks') || 'null') || initialTasks);
   const [view, setView] = useState('myday');
   const [selected, setSelected] = useState(null);
   const [query, setQuery] = useState('');
   const [newTask, setNewTask] = useState('');
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [dark, setDark] = useState(false);
+  const [suggestions, setSuggestions] = useState(true);
+  const [settings, setSettings] = useState(false);
+  const [notice, setNotice] = useState(true);
+  const [dark, setDark] = useState(true);
+  const [mobileNav, setMobileNav] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filter, setFilter] = useState('all');
 
   useEffect(() => localStorage.setItem('anyday.tasks', JSON.stringify(tasks)), [tasks]);
 
-  const active = tasks.filter(t => !t.done && (!query || t.title.toLowerCase().includes(query.toLowerCase())));
-  const today = active.filter(t => t.date === 'today');
-  const tomorrow = active.filter(t => t.date === 'tomorrow');
-  const upcoming = active.filter(t => t.date === 'upcoming');
+  const active = useMemo(() => tasks.filter(t => !t.done && (!query || t.title.toLowerCase().includes(query.toLowerCase())) && (filter === 'all' || t.priority === filter)), [tasks, query, filter]);
+  const myDay = active.filter(t => t.date === 'today');
   const selectedTask = tasks.find(t => t.id === selected) || null;
 
-  function addTask(e) {
+  const addTask = e => {
     e?.preventDefault();
     if (!newTask.trim()) return;
-    const task = { id: Date.now(), title: newTask.trim(), date: view === 'myday' ? 'today' : 'upcoming', time: '', list: 'Personal', tag: '', priority: 'none', pinned: false, subtasks: 0, done: false, notes: '' };
+    const task = { id: Date.now(), title: newTask.trim(), date: view === 'myday' ? 'today' : 'upcoming', time: '', list: 'Personal', tag: '', priority: 'none', pinned: false, done: false, notes: '' };
     setTasks(v => [task, ...v]); setNewTask(''); setSelected(task.id);
-  }
-  function toggleTask(id) { setTasks(v => v.map(t => t.id === id ? { ...t, done: !t.done } : t)); }
-  function updateTask(id, patch) { setTasks(v => v.map(t => t.id === id ? { ...t, ...patch } : t)); }
-  function deleteTask(id) { setTasks(v => v.filter(t => t.id !== id)); setSelected(null); }
+  };
+  const updateTask = (id, patch) => setTasks(v => v.map(t => t.id === id ? { ...t, ...patch } : t));
+  const toggleTask = id => updateTask(id, { done: true });
+  const deleteTask = id => { setTasks(v => v.filter(t => t.id !== id)); setSelected(null); };
 
   return <div className={dark ? 'app dark' : 'app'}>
-    <aside className="sidebar">
-      <div className="brand"><span className="brand-mark">✓</span><span>AnyDay</span></div>
-      <button className="add-main" onClick={() => document.querySelector('.quick-add input')?.focus()}><Plus size={18}/> Add task</button>
+    {notice && <div className="permission-banner">Any.do needs your permission to <u>enable reminder and calendar notifications</u><button onClick={() => setNotice(false)}><X size={20}/></button></div>}
+
+    <aside className={mobileNav ? 'sidebar mobile-open' : 'sidebar'}>
+      <div className="account"><div className="gear-circle"><Settings size={22}/></div><div><strong>Sree</strong><span>Free Plan</span></div></div>
+      <button className="premium-link"><Sparkles size={17}/> <span>Go Premium</span><b>Try It Free</b></button>
+      <button className="primary-add" onClick={() => document.querySelector('.quick-add input')?.focus()}><Plus size={18}/> Add task</button>
       <div className="side-scroll">
         <div className="nav-group">
-          {navItems.map(([id, label, Icon]) => <button key={id} className={view === id ? 'nav active' : 'nav'} onClick={() => setView(id)}><Icon size={18}/><span>{label}</span>{id === 'myday' && <span className="count">{today.length}</span>}</button>)}
+          {navItems.map(([id, label, Icon]) => <button key={id} className={view === id ? 'nav active' : 'nav'} onClick={() => {setView(id); setMobileNav(false)}}><Icon size={19}/><span>{label}</span>{id === 'myday' && <em>{myDay.length}</em>}{id === 'next7' && <em>6</em>}{id === 'all' && <em>6</em>}</button>)}
         </div>
-        <div className="side-label">MY LISTS <Plus size={14}/></div>
-        {['Personal','Work','Groceries','Ideas'].map((x, i) => <button className="nav" key={x} onClick={() => setView('list:'+x)}><span className="list-dot" style={{'--dot': ['#f1b955','#72a7ff','#71c48c','#c18cff'][i]}}></span><span>{x}</span><span className="count">{tasks.filter(t=>t.list===x&&!t.done).length}</span></button>)}
-        <div className="side-label">TAGS <Plus size={14}/></div>
-        {['Important','Work','Personal','Health'].map(x => <button className="nav tag-nav" key={x}><Tag size={15}/><span>{x}</span></button>)}
-        <div className="premium-card"><div className="premium-icon"><Sparkles size={16}/></div><div><strong>Unlock Premium</strong><p>Focus mode, AI, smart reminders & more.</p></div><ChevronRight size={15}/></div>
+        <div className="side-heading"><span>My lists <span className="lock">⌑</span></span><button><Plus size={19}/></button></div>
+        {lists.map((x, i) => <button className="nav list-nav" key={x} onClick={() => setView('list:'+x)}><span className={'list-dot dot-'+i}></span><span>{x}</span><em>{tasks.filter(t => t.list === x && !t.done).length}</em></button>)}
+        <div className="side-heading"><span>Tags</span><button><Plus size={19}/></button></div>
+        {tags.map(x => <button className="nav tag-nav" key={x}><Tag size={15}/><span>{x}</span></button>)}
+        <div className="collab-card"><button className="collab-close">×</button><strong>Easily collaborate with<br/>your family or team<span>.</span></strong><div className="bubbles"><i></i><i></i><i></i></div><button className="try-btn">Try it</button></div>
       </div>
-      <div className="sidebar-bottom"><button className="nav"><CircleHelp size={18}/> Help & feedback</button><button className="nav" onClick={() => setShowSettings(true)}><Settings size={18}/> Settings</button><div className="profile"><div className="avatar">SK</div><div><strong>Keerthi</strong><small>Personal space</small></div><MoreHorizontal size={18}/></div></div>
+      <div className="side-bottom"><button className="nav"><CircleHelp size={19}/> Help & feedback</button><button className="nav" onClick={() => setSettings(true)}><Settings size={19}/> Settings</button></div>
     </aside>
 
     <main className="workspace">
       <header className="topbar">
-        <div className="mobile-menu"><Menu size={20}/></div>
-        <div className="crumb"><span>{view === 'myday' ? 'My Day' : view === 'next7' ? 'Next 7 Days' : view === 'all' ? 'All Tasks' : view === 'calendar' ? 'Calendar' : view.split(':')[1]}</span></div>
-        <div className="top-actions"><div className="search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search"/><kbd>⌘ K</kbd></div><button className="icon-btn" title="Notifications"><Bell size={19}/></button><button className="icon-btn" onClick={()=>setDark(v=>!v)} title="Toggle theme">◐</button></div>
+        <button className="mobile-menu" onClick={() => setMobileNav(v=>!v)}><Menu size={22}/></button>
+        <div className="brand-small">AnyDay</div>
+        <div className="top-icons">
+          <button title="Sync"><RefreshCw size={19}/></button><button title="Help"><Headphones size={20}/></button><button className="notify" title="Notifications"><Inbox size={20}/><i></i></button><button onClick={() => setDark(v=>!v)} title="Theme">◐</button>
+        </div>
       </header>
 
-      {view === 'calendar' ? <Calendar tasks={tasks}/> : <div className="content">
-        <section className={selectedTask ? 'task-area with-detail' : 'task-area'}>
-          <div className="day-header"><div><h1>{view === 'myday' ? 'Good morning, Keerthi' : view === 'next7' ? 'Next 7 Days' : view === 'all' ? 'All Tasks' : view.split(':')[1]}</h1><p>{view === 'myday' ? formatDate() : 'Stay organized and keep moving forward.'}</p></div><div className="header-actions"><button className="soft-btn" onClick={()=>setShowSuggestions(true)}><Sparkles size={16}/> Suggestions</button><button className="icon-btn"><Filter size={17}/></button><button className="icon-btn"><Ellipsis size={18}/></button></div></div>
-          {view === 'myday' && <div className="focus-strip"><div><Zap size={17}/><strong>Make today count</strong><span>Pick a few things you can realistically finish.</span></div><button onClick={()=>setShowSuggestions(true)}>Plan my day</button></div>}
-          <TaskSection title="Today" tasks={view==='myday'?today:active} toggleTask={toggleTask} setSelected={setSelected}/>
-          {view === 'myday' && <><TaskSection title="Tomorrow" tasks={tomorrow} toggleTask={toggleTask} setSelected={setSelected}/><TaskSection title="Upcoming" tasks={upcoming} toggleTask={toggleTask} setSelected={setSelected}/></>}
-          <form className="quick-add" onSubmit={addTask}><Plus size={19}/><input value={newTask} onChange={e=>setNewTask(e.target.value)} placeholder="Add a task..."/><button type="submit">Add</button></form>
+      <div className="main-grid">
+        <section className="day-panel">
+          {view === 'myday' ? <>
+            <div className="hero-copy"><h1>Good Afternoon, Sree<span>.</span></h1><h2>You are what you do</h2></div>
+            <div className="calendar-connect"><div className="date-block"><b>FRI</b><strong>18</strong><span>September</span></div><div className="connect-copy"><strong>Join video meetings with one tap</strong><div><button>📅 Connect Google Calendar</button><button>▣ Connect Outlook Calendar</button><button>☁ Connect iCloud Calendar</button></div></div></div>
+            <TaskList tasks={myDay} toggleTask={toggleTask} selectTask={setSelected} />
+            <form className="quick-add" onSubmit={addTask}><Plus size={20}/><input value={newTask} onChange={e=>setNewTask(e.target.value)} placeholder="Enter task title"/><button type="submit" aria-label="add"><ArrowUpIcon/></button></form>
+          </> : view === 'calendar' ? <Calendar tasks={tasks}/> : <GenericView view={view} tasks={active} toggleTask={toggleTask} selectTask={setSelected} addTask={addTask} newTask={newTask} setNewTask={setNewTask}/>} 
         </section>
-        {selectedTask && <TaskDetail task={selectedTask} updateTask={updateTask} deleteTask={deleteTask} close={()=>setSelected(null)}/>} 
-      </div>}
+
+        <aside className="right-panel">
+          <div className="right-tools"><button className="suggestions-title" onClick={() => setSuggestions(v=>!v)}><Sparkles size={19}/> Suggestions</button><button onClick={()=>setShowFilters(v=>!v)}><FilterIcon/></button><button onClick={()=>setSettings(true)}><Settings size={19}/></button></div>
+          <div className="filter-row"><span>Filter</span><button onClick={()=>setShowFilters(v=>!v)}><SlidersHorizontal size={17}/></button></div>
+          {showFilters && <div className="filter-menu"><button onClick={()=>setFilter('all')}>All tasks</button><button onClick={()=>setFilter('high')}>High priority</button><button onClick={()=>setFilter('medium')}>Medium priority</button></div>}
+          {suggestions && <div className="suggestion-stack">
+            <Suggestion title="Watch My day tutorial" meta="From 0 days ago" add={()=>updateTask(7,{date:'today'})}/>
+            <Suggestion title="Add me to My Day" meta="Recently active" add={()=>updateTask(6,{date:'today'})}/>
+          </div>}
+          <div className="tutorial-card"><div className="fake-video"><div className="play">▶</div></div><strong>Tap to learn about My day</strong></div>
+        </aside>
+      </div>
     </main>
 
-    {showSuggestions && <Modal title="Smart suggestions" close={()=>setShowSuggestions(false)}><div className="suggestions"><p className="muted">Based on due dates, priorities and what is already planned.</p>{tasks.filter(t=>!t.done && t.date!=='today').slice(0,4).map(t=><div className="suggestion" key={t.id}><button onClick={()=>{updateTask(t.id,{date:'today'});setShowSuggestions(false)}}><Plus size={16}/></button><div><strong>{t.title}</strong><small>{t.date} · {t.list}</small></div><Sparkles size={15}/></div>)}</div></Modal>}
-    {showSettings && <Modal title="Settings" close={()=>setShowSettings(false)}><div className="settings-list"><label>Default view<select><option>My Day</option><option>All Tasks</option><option>Next 7 Days</option></select></label><label>My Day reset time<input type="time" defaultValue="00:00"/></label><label>Daily planning reminders<input type="checkbox" defaultChecked/></label><label>Notifications<input type="checkbox" defaultChecked/></label></div></Modal>}
-  </div>
+    {selectedTask && <TaskDetail task={selectedTask} updateTask={updateTask} deleteTask={deleteTask} close={()=>setSelected(null)}/>} 
+    {settings && <SettingsModal close={()=>setSettings(false)} dark={dark} setDark={setDark}/>} 
+  </div>;
 }
 
-function TaskSection({title,tasks,toggleTask,setSelected}) { return <section className="task-section"><div className="section-title"><span>{title}</span><span className="section-line"></span><span className="section-count">{tasks.length}</span></div>{tasks.length ? tasks.map(t=><TaskRow key={t.id} task={t} toggleTask={toggleTask} setSelected={setSelected}/>) : <div className="empty">Nothing here yet</div>}</section> }
-function TaskRow({task,toggleTask,setSelected}) { return <div className={'task-row '+(task.pinned?'pinned':'')} onClick={()=>setSelected(task.id)}><button className="check" onClick={e=>{e.stopPropagation();toggleTask(task.id)}}>{task.done && <Check size={14}/>}</button><div className="task-copy"><div className="task-title">{task.title}</div><div className="task-meta">{task.time && <span><Clock3 size={12}/>{task.time}</span>}{task.tag && <span className="tag-pill">{task.tag}</span>}{task.subtasks>0 && <span>{task.subtasks} subtasks</span>}</div></div><div className="row-actions"><Flag size={15} className={task.priority==='high'?'flag-high':''}/><MoreHorizontal size={18}/></div></div> }
+function ArrowUpIcon(){ return <span className="arrow-up">↑</span> }
+function FilterIcon(){ return <span className="filter-lines">≡</span> }
 
-function TaskDetail({task,updateTask,deleteTask,close}) { const [note,setNote]=useState(task.notes||''); useEffect(()=>setNote(task.notes||''),[task.id]); return <aside className="detail"><div className="detail-head"><button className="icon-btn" onClick={close}><X size={18}/></button><div><button className="detail-chip"><Bell size={14}/> Remind me</button><button className="detail-chip"><Tag size={14}/> {task.tag||'Tags'}</button></div><button className="icon-btn" onClick={()=>deleteTask(task.id)}><Trash2 size={17}/></button></div><input className="detail-title" value={task.title} onChange={e=>updateTask(task.id,{title:e.target.value})}/><div className="detail-section"><div className="detail-label">LIST</div><button className="detail-select"><Folder size={15}/>{task.list}<ChevronDown size={15}/></button></div><div className="detail-section"><div className="detail-label">DUE DATE</div><div className="date-grid"><button className={task.date==='today'?'selected':''} onClick={()=>updateTask(task.id,{date:'today'})}>Today</button><button className={task.date==='tomorrow'?'selected':''} onClick={()=>updateTask(task.id,{date:'tomorrow'})}>Tomorrow</button><button className={task.date==='upcoming'?'selected':''} onClick={()=>updateTask(task.id,{date:'upcoming'})}>Upcoming</button></div></div><div className="detail-section"><div className="detail-label">SUBTASKS <span>{task.subtasks||0}/0</span></div><div className="subtask-input"><Plus size={16}/><input placeholder="Add a new subtask"/></div></div><div className="detail-section"><div className="detail-label">NOTES</div><textarea value={note} onChange={e=>{setNote(e.target.value);updateTask(task.id,{notes:e.target.value})}} placeholder="Insert your notes here..."/></div><div className="detail-section"><div className="detail-label">ATTACHMENTS</div><div className="attachment">Drop files here or <strong>browse</strong></div></div><div className="detail-footer"><button><Clock3 size={15}/> Focus</button><button><Flag size={15}/> Priority</button><button><MoreHorizontal size={15}/></button></div></aside> }
+function TaskList({tasks,toggleTask,selectTask}) { return <div className="task-list">{tasks.length ? tasks.map(t => <TaskRow key={t.id} task={t} toggleTask={toggleTask} selectTask={selectTask}/>) : <div className="empty-state">Your day is clear. Add a task below.</div>}</div> }
+function TaskRow({task,toggleTask,selectTask}) { return <div className={'task-row '+(task.pinned?'pinned':'')} onClick={()=>selectTask(task.id)}><button className="circle-check" onClick={e=>{e.stopPropagation();toggleTask(task.id)}}></button><div className="task-text"><div>{task.title}</div>{(task.time||task.tag||task.priority!=='none') && <small>{task.time}{task.tag && ` · ${task.tag}`}{task.priority!=='none' && ` · ${task.priority}`}</small>}</div><div className="task-end">{task.pinned && <Pin size={13}/>}<MoreHorizontal size={20}/></div></div> }
+function Suggestion({title,meta,add}) { return <div className="suggestion-card"><button className="plus-suggest" onClick={add}><Plus size={19}/></button><div><div className="suggestion-source">⌑ My lists &gt; Personal</div><strong>{title}</strong><small>{meta}</small></div></div> }
 
-function Calendar({tasks}) { return <div className="calendar"><div className="calendar-top"><div><h1>Calendar</h1><p>Plan tasks and events in one place.</p></div><div className="month-nav"><button className="icon-btn"><ChevronLeft size={18}/></button><strong>{new Intl.DateTimeFormat('en-US',{month:'long',year:'numeric'}).format(new Date())}</strong><button className="icon-btn"><ChevronRight size={18}/></button></div></div><div className="week"><div className="calendar-head"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div className="calendar-grid">{Array.from({length:35},(_,i)=>{const d=i-1;return <div className={'cal-cell '+(d===new Date().getDate()?'today-cell':'')} key={i}><b>{d>0&&d<=31?d:''}</b>{d===new Date().getDate()&&tasks.filter(t=>t.date==='today').slice(0,2).map(t=><div className="cal-task" key={t.id}>{t.title}</div>)}</div>})}</div></div></div> }
-function Modal({title,close,children}) { return <div className="modal-backdrop" onMouseDown={close}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-head"><h2>{title}</h2><button className="icon-btn" onClick={close}><X size={18}/></button></div>{children}</div></div> }
+function GenericView({view,tasks,toggleTask,selectTask,addTask,newTask,setNewTask}) { const title = view==='next7'?'Next 7 days':view==='all'?'All my tasks':view.startsWith('list:')?view.split(':')[1]:'My Calendar'; return <><div className="generic-head"><div><h1>{title}</h1><p>Plan, organize and get things done.</p></div><button><Filter size={17}/></button></div><TaskList tasks={tasks} toggleTask={toggleTask} selectTask={selectTask}/><form className="quick-add" onSubmit={addTask}><Plus size={20}/><input value={newTask} onChange={e=>setNewTask(e.target.value)} placeholder="Enter task title"/><button type="submit"><ArrowUpIcon/></button></form></> }
+
+function Calendar({tasks}) { const d = new Date(); return <div className="calendar-view"><div className="generic-head"><div><h1>My Calendar</h1><p>See your tasks and events together.</p></div><div className="month-nav"><button><ChevronLeft size={17}/></button><strong>{d.toLocaleString('en-US',{month:'long',year:'numeric'})}</strong><button><ChevronRight size={17}/></button></div></div><div className="calendar-grid">{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=><div className="calendar-day-name" key={x}>{x}</div>)}{Array.from({length:35},(_,i)=>{const n=i-1; return <div className={'calendar-cell '+(n===18?'today':'')} key={i}><b>{n>0&&n<=30?n:''}</b>{n===18 && tasks.filter(t=>t.date==='today').slice(0,2).map(t=><div className="calendar-task" key={t.id}>{t.title}</div>)}</div>})}</div></div> }
+
+function TaskDetail({task,updateTask,deleteTask,close}) { const [note,setNote]=useState(task.notes||''); const [subtasks,setSubtasks]=useState([]); const [sub,setSub]=useState(''); useEffect(()=>setNote(task.notes||''),[task.id]); const addSub=()=>{if(sub.trim()){setSubtasks(v=>[...v,sub.trim()]);setSub('')}}; return <aside className="detail-panel"><div className="detail-top"><button onClick={close}><X size={19}/></button><div><button><Bell size={15}/> Remind me</button><button><Tag size={15}/> {task.tag||'Tags'}</button></div><button onClick={()=>deleteTask(task.id)}><Trash2 size={17}/></button></div><input className="detail-title" value={task.title} onChange={e=>updateTask(task.id,{title:e.target.value})}/><DetailSection label="LIST"><button className="select-detail"><Folder size={15}/>{task.list}<ChevronDown size={15}/></button></DetailSection><DetailSection label="DUE DATE"><div className="date-options"><button className={task.date==='today'?'chosen':''} onClick={()=>updateTask(task.id,{date:'today'})}>Today</button><button className={task.date==='tomorrow'?'chosen':''} onClick={()=>updateTask(task.id,{date:'tomorrow'})}>Tomorrow</button><button className={task.date==='upcoming'?'chosen':''} onClick={()=>updateTask(task.id,{date:'upcoming'})}>Upcoming</button></div></DetailSection><DetailSection label={`SUBTASKS ${subtasks.length?subtasks.length:0}`}><div className="sub-add"><Plus size={16}/><input value={sub} onChange={e=>setSub(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addSub()} placeholder="Add a new subtask"/></div>{subtasks.map((s,i)=><div className="sub-item" key={i}><CheckCircle2 size={15}/>{s}</div>)}</DetailSection><DetailSection label="NOTES"><textarea value={note} onChange={e=>{setNote(e.target.value);updateTask(task.id,{notes:e.target.value})}} placeholder="Insert your notes here..."/></DetailSection><DetailSection label="ATTACHMENTS"><div className="attachment"><Paperclip size={16}/> Drop files here or <b>browse</b></div></DetailSection><div className="detail-bottom"><button><Clock3 size={15}/> Focus</button><button><Flag size={15}/> Priority</button><button><MoreHorizontal size={16}/></button></div></aside> }
+function DetailSection({label,children}){return <div className="detail-section"><div className="detail-label">{label}</div>{children}</div>}
+function SettingsModal({close,dark,setDark}) { return <div className="overlay" onMouseDown={close}><div className="settings-modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-head"><h2>Settings</h2><button onClick={close}><X size={19}/></button></div><div className="settings-tabs"><b>My Day</b><span>General</span><span>Notifications</span><span>Integrations</span></div><label>My Day reset time<input type="time" defaultValue="00:00"/></label><label>Smart Suggestions<div className="switch on"></div></label><label>Daily push notifications<div className="switch on"></div></label><label>Appearance<button className="appearance" onClick={()=>setDark(v=>!v)}>{dark?'Dark':'Light'} <ChevronDown size={14}/></button></label><button className="close-settings" onClick={close}>Done</button></div></div> }
 
 createRoot(document.getElementById('root')).render(<App/>);
