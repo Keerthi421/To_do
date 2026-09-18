@@ -28,6 +28,7 @@ const navItems = [
 ];
 
 const todayLabel = () => new Intl.DateTimeFormat('en-US', { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date());
+const dateLabel = (date) => ({ today: 'Today', tomorrow: 'Tomorrow', upcoming: 'Upcoming' }[date] || date || 'No date');
 
 function App() {
   const [tasks, setTasks] = useState(() => JSON.parse(localStorage.getItem('anyday.tasks') || 'null') || initialTasks);
@@ -45,7 +46,9 @@ function App() {
 
   useEffect(() => localStorage.setItem('anyday.tasks', JSON.stringify(tasks)), [tasks]);
 
-  const active = useMemo(() => tasks.filter(t => !t.done && (!query || t.title.toLowerCase().includes(query.toLowerCase())) && (filter === 'all' || t.priority === filter)), [tasks, query, filter]);
+  const matches = useMemo(() => tasks.filter(t => (!query || t.title.toLowerCase().includes(query.toLowerCase())) && (filter === 'all' || t.priority === filter)), [tasks, query, filter]);
+  const active = matches.filter(t => !t.done);
+  const allTasks = matches;
   const myDay = active.filter(t => t.date === 'today');
   const selectedTask = tasks.find(t => t.id === selected) || null;
 
@@ -56,25 +59,24 @@ function App() {
     setTasks(v => [task, ...v]); setNewTask(''); setSelected(task.id);
   };
   const updateTask = (id, patch) => setTasks(v => v.map(t => t.id === id ? { ...t, ...patch } : t));
-  const toggleTask = id => updateTask(id, { done: true });
+  const toggleTask = id => setTasks(v => v.map(t => t.id === id ? { ...t, done: !t.done } : t));
   const deleteTask = id => { setTasks(v => v.filter(t => t.id !== id)); setSelected(null); };
 
   return <div className={dark ? 'app dark' : 'app'}>
     {notice && <div className="permission-banner">Any.do needs your permission to <u>enable reminder and calendar notifications</u><button onClick={() => setNotice(false)}><X size={20}/></button></div>}
 
     <aside className={mobileNav ? 'sidebar mobile-open' : 'sidebar'}>
-      <div className="account"><div className="gear-circle"><Settings size={22}/></div><div><strong>Sree</strong><span>Free Plan</span></div></div>
-      <button className="premium-link"><Sparkles size={17}/> <span>Go Premium</span><b>Try It Free</b></button>
+      <div className="account"><div className="gear-circle"><Settings size={22}/></div><div><strong>Sree</strong><span>All features enabled</span></div></div>
       <button className="primary-add" onClick={() => document.querySelector('.quick-add input')?.focus()}><Plus size={18}/> Add task</button>
       <div className="side-scroll">
         <div className="nav-group">
-          {navItems.map(([id, label, Icon]) => <button key={id} className={view === id ? 'nav active' : 'nav'} onClick={() => {setView(id); setMobileNav(false)}}><Icon size={19}/><span>{label}</span>{id === 'myday' && <em>{myDay.length}</em>}{id === 'next7' && <em>6</em>}{id === 'all' && <em>6</em>}</button>)}
+          {navItems.map(([id, label, Icon]) => <button key={id} className={view === id ? 'nav active' : 'nav'} onClick={() => {setView(id); setMobileNav(false)}}><Icon size={19}/><span>{label}</span>{id === 'myday' && <em>{myDay.length}</em>}{id === 'next7' && <em>{active.length}</em>}{id === 'all' && <em>{allTasks.length}</em>}</button>)}
         </div>
         <div className="side-heading"><span>My lists <span className="lock">⌑</span></span><button><Plus size={19}/></button></div>
         {lists.map((x, i) => <button className="nav list-nav" key={x} onClick={() => setView('list:'+x)}><span className={'list-dot dot-'+i}></span><span>{x}</span><em>{tasks.filter(t => t.list === x && !t.done).length}</em></button>)}
         <div className="side-heading"><span>Tags</span><button><Plus size={19}/></button></div>
         {tags.map(x => <button className="nav tag-nav" key={x}><Tag size={15}/><span>{x}</span></button>)}
-        <div className="collab-card"><button className="collab-close">×</button><strong>Easily collaborate with<br/>your family or team<span>.</span></strong><div className="bubbles"><i></i><i></i><i></i></div><button className="try-btn">Try it</button></div>
+        <div className="collab-card"><button className="collab-close">×</button><strong>Everything is available<br/>in your personal workspace<span>.</span></strong><div className="bubbles"><i></i><i></i><i></i></div><button className="try-btn">Explore</button></div>
       </div>
       <div className="side-bottom"><button className="nav"><CircleHelp size={19}/> Help & feedback</button><button className="nav" onClick={() => setSettings(true)}><Settings size={19}/> Settings</button></div>
     </aside>
@@ -95,7 +97,7 @@ function App() {
             <div className="calendar-connect"><div className="date-block"><b>FRI</b><strong>18</strong><span>September</span></div><div className="connect-copy"><strong>Join video meetings with one tap</strong><div><button>📅 Connect Google Calendar</button><button>▣ Connect Outlook Calendar</button><button>☁ Connect iCloud Calendar</button></div></div></div>
             <TaskList tasks={myDay} toggleTask={toggleTask} selectTask={setSelected} />
             <form className="quick-add" onSubmit={addTask}><Plus size={20}/><input value={newTask} onChange={e=>setNewTask(e.target.value)} placeholder="Enter task title"/><button type="submit" aria-label="add"><ArrowUpIcon/></button></form>
-          </> : view === 'calendar' ? <Calendar tasks={tasks}/> : <GenericView view={view} tasks={active} toggleTask={toggleTask} selectTask={setSelected} addTask={addTask} newTask={newTask} setNewTask={setNewTask}/>} 
+          </> : view === 'calendar' ? <Calendar tasks={tasks}/> : <GenericView view={view} tasks={view === 'all' ? allTasks : active} allTasks={allTasks} toggleTask={toggleTask} selectTask={setSelected} addTask={addTask} newTask={newTask} setNewTask={setNewTask}/>} 
         </section>
 
         <aside className="right-panel">
@@ -120,10 +122,29 @@ function ArrowUpIcon(){ return <span className="arrow-up">↑</span> }
 function FilterIcon(){ return <span className="filter-lines">≡</span> }
 
 function TaskList({tasks,toggleTask,selectTask}) { return <div className="task-list">{tasks.length ? tasks.map(t => <TaskRow key={t.id} task={t} toggleTask={toggleTask} selectTask={selectTask}/>) : <div className="empty-state">Your day is clear. Add a task below.</div>}</div> }
-function TaskRow({task,toggleTask,selectTask}) { return <div className={'task-row '+(task.pinned?'pinned':'')} onClick={()=>selectTask(task.id)}><button className="circle-check" onClick={e=>{e.stopPropagation();toggleTask(task.id)}}></button><div className="task-text"><div>{task.title}</div>{(task.time||task.tag||task.priority!=='none') && <small>{task.time}{task.tag && ` · ${task.tag}`}{task.priority!=='none' && ` · ${task.priority}`}</small>}</div><div className="task-end">{task.pinned && <Pin size={13}/>}<MoreHorizontal size={20}/></div></div> }
+function TaskRow({task,toggleTask,selectTask}) { return <div className={'task-row '+(task.pinned?'pinned ':'')+(task.done?'completed':'')} onClick={()=>selectTask(task.id)}><button className="circle-check" onClick={e=>{e.stopPropagation();toggleTask(task.id)}}>{task.done && <Check size={14}/>}</button><div className="task-text"><div>{task.title}</div>{(task.time||task.tag||task.priority!=='none') && <small>{task.time}{task.tag && ` · ${task.tag}`}{task.priority!=='none' && ` · ${task.priority}`}</small>}</div><div className="task-end">{task.pinned && <Pin size={13}/>}<MoreHorizontal size={20}/></div></div> }
 function Suggestion({title,meta,add}) { return <div className="suggestion-card"><button className="plus-suggest" onClick={add}><Plus size={19}/></button><div><div className="suggestion-source">⌑ My lists &gt; Personal</div><strong>{title}</strong><small>{meta}</small></div></div> }
 
-function GenericView({view,tasks,toggleTask,selectTask,addTask,newTask,setNewTask}) { const title = view==='next7'?'Next 7 days':view==='all'?'All my tasks':view.startsWith('list:')?view.split(':')[1]:'My Calendar'; return <><div className="generic-head"><div><h1>{title}</h1><p>Plan, organize and get things done.</p></div><button><Filter size={17}/></button></div><TaskList tasks={tasks} toggleTask={toggleTask} selectTask={selectTask}/><form className="quick-add" onSubmit={addTask}><Plus size={20}/><input value={newTask} onChange={e=>setNewTask(e.target.value)} placeholder="Enter task title"/><button type="submit"><ArrowUpIcon/></button></form></> }
+function GenericView({view,tasks,allTasks,toggleTask,selectTask,addTask,newTask,setNewTask}) {
+  const title = view==='next7'?'Next 7 days':view==='all'?'All my tasks':view.startsWith('list:')?view.split(':')[1]:'My Calendar';
+  return <>
+    <div className="generic-head"><div><h1>{title}</h1><p>{view === 'all' ? `${allTasks.length} task${allTasks.length === 1 ? '' : 's'} across all entered days` : 'Plan, organize and get things done.'}</p></div><button><Filter size={17}/></button></div>
+    {view === 'all' ? <AllTasksHistory tasks={tasks} toggleTask={toggleTask} selectTask={selectTask}/> : <TaskList tasks={tasks} toggleTask={toggleTask} selectTask={selectTask}/>} 
+    <form className="quick-add" onSubmit={addTask}><Plus size={20}/><input value={newTask} onChange={e=>setNewTask(e.target.value)} placeholder="Enter task title"/><button type="submit"><ArrowUpIcon/></button></form>
+  </>
+}
+
+function AllTasksHistory({tasks,toggleTask,selectTask}) {
+  const groups = ['today','tomorrow','upcoming'];
+  const known = groups.map(date => ({date, tasks: tasks.filter(t => t.date === date)})).filter(g => g.tasks.length);
+  const dated = tasks.filter(t => !groups.includes(t.date));
+  if (dated.length) known.push({date:'other', tasks:dated});
+  if (!known.length) return <div className="history-empty"><CheckCircle2 size={34}/><h3>No tasks yet</h3><p>Every task you enter will remain here, including completed tasks and tasks from previous days.</p></div>;
+  return <div className="all-history">
+    <div className="history-summary"><span><CheckCircle2 size={16}/> All entered tasks</span><strong>{tasks.length}</strong><span className="history-done">{tasks.filter(t=>t.done).length} completed</span></div>
+    {known.map(group => <section className="history-group" key={group.date}><div className="history-heading"><span>{dateLabel(group.date)}</span><em>{group.tasks.length}</em></div>{group.tasks.map(t=><TaskRow key={t.id} task={t} toggleTask={toggleTask} selectTask={selectTask}/>)}</section>)}
+  </div>
+}
 
 function Calendar({tasks}) { const d = new Date(); return <div className="calendar-view"><div className="generic-head"><div><h1>My Calendar</h1><p>See your tasks and events together.</p></div><div className="month-nav"><button><ChevronLeft size={17}/></button><strong>{d.toLocaleString('en-US',{month:'long',year:'numeric'})}</strong><button><ChevronRight size={17}/></button></div></div><div className="calendar-grid">{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=><div className="calendar-day-name" key={x}>{x}</div>)}{Array.from({length:35},(_,i)=>{const n=i-1; return <div className={'calendar-cell '+(n===18?'today':'')} key={i}><b>{n>0&&n<=30?n:''}</b>{n===18 && tasks.filter(t=>t.date==='today').slice(0,2).map(t=><div className="calendar-task" key={t.id}>{t.title}</div>)}</div>})}</div></div> }
 
