@@ -1,5 +1,8 @@
 import { supabase, supabaseEnabled } from './supabase';
 
+const priorityToDb = value => ({ none: 0, low: 1, medium: 2, high: 3 }[value] ?? 0);
+const priorityFromDb = value => ({ 0: 'none', 1: 'low', 2: 'medium', 3: 'high' }[value] ?? 'none');
+
 const toClientTask = row => ({
   id: row.id,
   title: row.title,
@@ -8,7 +11,7 @@ const toClientTask = row => ({
   time: row.due_at && row.due_at.length >= 16 ? new Date(row.due_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '',
   list: row.list_id || 'Personal',
   tag: '',
-  priority: row.priority || 'none',
+  priority: priorityFromDb(row.priority),
   pinned: Boolean(row.pinned),
   done: Boolean(row.completed),
   createdAt: row.created_at,
@@ -17,11 +20,10 @@ const toClientTask = row => ({
 });
 
 const toRow = task => ({
-  id: String(task.id),
   title: task.title,
   notes: task.notes || '',
   due_at: task.date && !['today', 'tomorrow', 'upcoming'].includes(task.date) ? task.date : null,
-  priority: task.priority || 'none',
+  priority: priorityToDb(task.priority),
   pinned: Boolean(task.pinned),
   completed: Boolean(task.done),
   completed_at: task.completedAt || null,
@@ -56,19 +58,16 @@ export async function signOut() {
 
 export async function loadTasks() {
   if (!supabaseEnabled) return null;
-  const { data, error } = await supabase
-    .from('tasks')
+  const { data, error } = await supabase.from('tasks')
     .select('id,title,notes,due_at,list_id,priority,pinned,completed,completed_at,created_at,updated_at')
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false });
+    .is('deleted_at', null).order('created_at', { ascending: false });
   if (error) throw error;
   return (data || []).map(toClientTask);
 }
 
 export async function insertTask(task, userId) {
   if (!supabaseEnabled || !userId) return null;
-  const payload = { ...toRow(task), user_id: userId };
-  const { data, error } = await supabase.from('tasks').insert(payload).select().single();
+  const { data, error } = await supabase.from('tasks').insert({ ...toRow(task), user_id: userId }).select().single();
   if (error) throw error;
   return toClientTask(data);
 }
@@ -78,12 +77,9 @@ export async function updateTaskRemote(id, patch) {
   const row = {};
   if ('title' in patch) row.title = patch.title;
   if ('notes' in patch) row.notes = patch.notes || '';
-  if ('priority' in patch) row.priority = patch.priority || 'none';
+  if ('priority' in patch) row.priority = priorityToDb(patch.priority);
   if ('pinned' in patch) row.pinned = Boolean(patch.pinned);
-  if ('done' in patch) {
-    row.completed = Boolean(patch.done);
-    row.completed_at = patch.done ? new Date().toISOString() : null;
-  }
+  if ('done' in patch) { row.completed = Boolean(patch.done); row.completed_at = patch.done ? new Date().toISOString() : null; }
   if ('date' in patch && !['today', 'tomorrow', 'upcoming'].includes(patch.date)) row.due_at = patch.date || null;
   const { error } = await supabase.from('tasks').update(row).eq('id', id);
   if (error) throw error;
