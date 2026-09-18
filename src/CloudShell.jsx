@@ -3,6 +3,7 @@ import { getSession, signInWithEmail, signUpWithEmail, signOut, loadTasks, inser
 import { supabaseEnabled } from './backend/supabase';
 import { requestReminderPermission, syncReminders } from './backend/reminderScheduler';
 import { makeRecurringCopy, nextOccurrence } from './backend/recurrence';
+import CompleteApp from './CompleteApp';
 
 const KEY = 'anyday.tasks';
 const readLocal = () => { try { const value = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
@@ -34,18 +35,13 @@ export default function CloudShell({ children }) {
   async function hydrate(userId) {
     const remote = await loadTasks();
     const local = readLocal();
-    if (remote?.length) {
-      writeLocal(remote);
-    } else if (local.length) {
+    if (remote?.length) writeLocal(remote);
+    else if (local.length) {
       const demoOnly = local.every(task => typeof task.id === 'number');
-      if (demoOnly) {
-        writeLocal([]);
-      } else {
+      if (demoOnly) writeLocal([]);
+      else {
         for (const task of local) {
-          try {
-            const saved = await insertTask(task, userId);
-            if (saved) known.current.set(String(task.id), saved);
-          } catch { /* keep local fallback */ }
+          try { const saved = await insertTask(task, userId); if (saved) known.current.set(String(task.id), saved); } catch {}
         }
         const refreshed = await loadTasks();
         if (refreshed) writeLocal(refreshed);
@@ -96,20 +92,16 @@ export default function CloudShell({ children }) {
             }
           } else if (JSON.stringify(old) !== JSON.stringify(task)) {
             await updateTaskRemote(task.id, task);
-            // Completing a recurring task creates the next occurrence once.
             if (!old.done && task.done && task.recurrenceRule) {
               const dueAt = nextOccurrence(task);
               if (dueAt) {
-                const copy = makeRecurringCopy(task, dueAt);
-                const saved = await insertTask(copy, session.user.id);
+                const saved = await insertTask(makeRecurringCopy(task, dueAt), session.user.id);
                 if (saved) writeLocal([saved, ...readLocal()]);
               }
             }
           }
         }
-        for (const [id] of previous) {
-          if (!current.some(t => String(t.id) === String(id))) await softDeleteTask(id);
-        }
+        for (const [id] of previous) if (!current.some(t => String(t.id) === String(id))) await softDeleteTask(id);
         syncReminders(readLocal());
         known.current = new Map(readLocal().map(t => [String(t.id), t]));
       } catch (e) { setError(e.message); }
@@ -128,10 +120,9 @@ export default function CloudShell({ children }) {
     finally { setBusy(false); }
   }
 
-  if (!supabaseEnabled) return children;
-  if (!ready) return <div style={screenStyle}><div style={cardStyle}><h1>AnyDay</h1><p>Connecting your task workspace…</p></div></div>;
-  if (!session) return <div style={screenStyle}><form onSubmit={submit} style={cardStyle}><div style={{fontSize:12,fontWeight:700,letterSpacing:2,textTransform:'uppercase',opacity:.6}}>AnyDay</div><h1 style={{margin:'8px 0 6px'}}>Your day, organized.</h1><p style={{opacity:.7}}>Sign in to keep your complete task history synced across devices.</p><input required type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} style={inputStyle}/><input required minLength={6} type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} style={inputStyle}/>{error && <div style={{color:'#ff8e8e',fontSize:13}}>{error}</div>}<button disabled={busy} style={buttonStyle}>{busy ? 'Please wait…' : authMode==='signin' ? 'Sign in' : 'Create account'}</button><button type="button" onClick={()=>{setAuthMode(v=>v==='signin'?'signup':'signin');setError('')}} style={linkButtonStyle}>{authMode==='signin' ? 'Create a free account' : 'Already have an account? Sign in'}</button></form></div>;
-  return <div style={{minHeight:'100vh'}}>{children}<button onClick={async()=>{await signOut();setSession(null)}} style={signOutStyle}>Sign out</button></div>;
+  if (supabaseEnabled && !ready) return <div style={screenStyle}><div style={cardStyle}><h1>AnyDay</h1><p>Connecting your task workspace…</p></div></div>;
+  if (supabaseEnabled && !session) return <div style={screenStyle}><form onSubmit={submit} style={cardStyle}><div style={{fontSize:12,fontWeight:700,letterSpacing:2,textTransform:'uppercase',opacity:.6}}>AnyDay</div><h1 style={{margin:'8px 0 6px'}}>Your day, organized.</h1><p style={{opacity:.7}}>Sign in to keep your complete task history synced across devices.</p><input required type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} style={inputStyle}/><input required minLength={6} type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} style={inputStyle}/>{error&&<div style={{color:'#ff8e8e',fontSize:13}}>{error}</div>}<button disabled={busy} style={buttonStyle}>{busy?'Please wait…':authMode==='signin'?'Sign in':'Create account'}</button><button type="button" onClick={()=>{setAuthMode(v=>v==='signin'?'signup':'signin');setError('')}} style={linkButtonStyle}>{authMode==='signin'?'Create a free account':'Already have an account? Sign in'}</button></form></div>;
+  return <div style={{minHeight:'100vh'}}><CompleteApp/><button onClick={async()=>{await signOut();setSession(null)}} style={signOutStyle}>Sign out</button></div>;
 }
 
 const screenStyle={minHeight:'100vh',display:'grid',placeItems:'center',background:'#141618',color:'#f7f2e9',fontFamily:'Inter,system-ui,sans-serif',padding:24};
