@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getSession, signInWithEmail, signUpWithEmail, signOut, loadTasks, insertTask, updateTaskRemote, softDeleteTask, subscribeToTasks } from './backend/taskRepository';
 import { supabaseEnabled } from './backend/supabase';
+import { requestReminderPermission, syncReminders } from './backend/reminderScheduler';
 
 const KEY = 'anyday.tasks';
 const readLocal = () => { try { const value = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
@@ -35,7 +36,6 @@ export default function CloudShell({ children }) {
     if (remote?.length) {
       writeLocal(remote);
     } else if (local.length) {
-      // Never seed a fresh account with the built-in demo tasks.
       const demoOnly = local.every(task => typeof task.id === 'number');
       if (demoOnly) {
         writeLocal([]);
@@ -57,18 +57,26 @@ export default function CloudShell({ children }) {
   useEffect(() => {
     if (!session) return;
     const unsubscribe = subscribeToTasks(session.user.id, async () => {
-      // Re-read the complete row shape instead of reconstructing it from the
-      // realtime payload. This keeps list names, reminders and recurrence data intact.
       try {
         const remote = await loadTasks();
         if (remote) {
           writeLocal(remote);
           known.current = new Map(remote.map(t => [String(t.id), t]));
+          syncReminders(remote);
           window.dispatchEvent(new CustomEvent('anyday:remote-change'));
         }
       } catch (e) { setError(e.message); }
     });
     return unsubscribe;
+  }, [session]);
+
+  useEffect(() => {
+    const tasks = readLocal();
+    syncReminders(tasks);
+    if (tasks.some(t => t.reminderAt && !t.done)) {
+      // Permission is requested only when the user has actually configured a reminder.
+      requestReminderPermission().catch(() => {});
+    }
   }, [session]);
 
   useEffect(() => {
@@ -94,6 +102,7 @@ export default function CloudShell({ children }) {
         for (const [id] of previous) {
           if (!current.some(t => String(t.id) === String(id))) await softDeleteTask(id);
         }
+        syncReminders(readLocal());
         known.current = new Map(readLocal().map(t => [String(t.id), t]));
       } catch (e) { setError(e.message); }
       finally { syncing.current = false; }
