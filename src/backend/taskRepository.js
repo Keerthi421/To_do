@@ -12,7 +12,7 @@ const dateTokenToIso = value => {
   }
   return null;
 };
-const taskSelect = 'id,title,notes,due_at,reminder_at,recurrence_rule,list_id,priority,pinned,completed,completed_at,archived,created_at,updated_at,lists(name),task_tags(tags(name))';
+const taskSelect = 'id,title,notes,due_at,reminder_at,recurrence_rule,list_id,priority,pinned,completed,completed_at,archived,all_day,created_at,updated_at,lists(name),task_tags(tags(name))';
 
 const toClientTask = row => ({
   id: row.id, title: row.title, notes: row.notes || '',
