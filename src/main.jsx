@@ -55,10 +55,12 @@ function App() {
   const [filter, setFilter] = useState('all');
   const [historyStatus, setHistoryStatus] = useState('all');
   const [historyRange, setHistoryRange] = useState('all');
-  const [listsState, setListsState] = useState(lists);
-  const [tagsState, setTagsState] = useState(tags);
+  const [listsState, setListsState] = useState(() => { try { const v = JSON.parse(localStorage.getItem('anyday.lists') || 'null'); return Array.isArray(v) ? v : lists; } catch { return lists; } });
+  const [tagsState, setTagsState] = useState(() => { try { const v = JSON.parse(localStorage.getItem('anyday.tags') || 'null'); return Array.isArray(v) ? v : tags; } catch { return tags; } });
   const addList = () => { const name = window.prompt('New list name'); if (name?.trim() && !listsState.includes(name.trim())) setListsState(v => [...v, name.trim()]); };
   const addTag = () => { const name = window.prompt('New tag name'); if (name?.trim() && !tagsState.includes(name.trim())) setTagsState(v => [...v, name.trim()]); };
+  useEffect(() => { localStorage.setItem('anyday.lists', JSON.stringify(listsState)); }, [listsState]);
+  useEffect(() => { localStorage.setItem('anyday.tags', JSON.stringify(tagsState)); }, [tagsState]);
   useEffect(() => { localStorage.setItem('anyday.tasks', JSON.stringify(tasks)); window.dispatchEvent(new Event('anyday:local-change')); }, [tasks]);
   useEffect(() => { const sync = () => { try { const s = JSON.parse(localStorage.getItem('anyday.tasks') || 'null'); if (Array.isArray(s)) setTasks(s.map(normalizeTask)); } catch {} }; window.addEventListener('anyday:remote-change', sync); return () => window.removeEventListener('anyday:remote-change', sync); }, []);
   const matches = useMemo(() => tasks.filter(t => (!query || t.title.toLowerCase().includes(query.toLowerCase())) && (filter === 'all' || t.priority === filter)), [tasks, query, filter]);
