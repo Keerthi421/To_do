@@ -20,14 +20,15 @@ export function scheduleReminder(task) {
   cancelReminder(task.id);
   const at = new Date(task.reminderAt).getTime();
   const delay = at - Date.now();
-  if (!Number.isFinite(at) || delay <= 0 || delay > 2147483647) return;
+  if (!Number.isFinite(at) || delay <= 0) return;
   const timer = window.setTimeout(async () => {
+    if (Date.now() < at) { scheduleReminder(task); return; }
     timers.delete(String(task.id));
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try { new Notification('AnyDay reminder', { body: task.title, tag: `anyday-${task.id}` }); } catch {}
     }
     try { localStorage.removeItem(PREFIX + String(task.id)); } catch {}
-  }, delay);
+  }, Math.min(delay, 2147483647));
   timers.set(String(task.id), timer);
   try { localStorage.setItem(PREFIX + String(task.id), String(at)); } catch {}
 }
