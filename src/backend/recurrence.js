@@ -21,6 +21,9 @@ export function nextOccurrence(task) {
 }
 
 export function makeRecurringCopy(task, dueAt) {
+  const nextDue = new Date(dueAt);
+  const sourceDue = task.dueAt ? new Date(task.dueAt) : null;
+  const reminderOffset = sourceDue && task.reminderAt ? new Date(task.reminderAt).getTime() - sourceDue.getTime() : null;
   return {
     ...task,
     id: undefined,
@@ -28,7 +31,7 @@ export function makeRecurringCopy(task, dueAt) {
     date: dueAt.slice(0, 10),
     done: false,
     completedAt: null,
-    reminderAt: null,
+    reminderAt: reminderOffset != null ? new Date(nextDue.getTime() + reminderOffset).toISOString() : null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
