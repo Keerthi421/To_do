@@ -2,6 +2,16 @@ import { supabase, supabaseEnabled } from './supabase';
 
 const priorityToDb = value => ({ none: 0, low: 1, medium: 2, high: 3 }[value] ?? 0);
 const priorityFromDb = value => ({ 0: 'none', 1: 'low', 2: 'medium', 3: 'high' }[value] ?? 'none');
+const dateTokenToIso = value => {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(value + 'T09:00:00').toISOString();
+  if (value === 'today' || value === 'tomorrow') {
+    const d = new Date();
+    if (value === 'tomorrow') d.setDate(d.getDate() + 1);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0, 0).toISOString();
+  }
+  return null;
+};
 const taskSelect = 'id,title,notes,due_at,reminder_at,recurrence_rule,list_id,priority,pinned,completed,completed_at,archived,created_at,updated_at,lists(name),task_tags(tags(name))';
 
 const toClientTask = row => ({
@@ -16,7 +26,7 @@ const toClientTask = row => ({
 
 const toRow = task => ({
   title: task.title, notes: task.notes || '',
-  due_at: task.dueAt || (task.date && !['today', 'tomorrow', 'upcoming'].includes(task.date) ? task.date : null),
+  due_at: task.dueAt || dateTokenToIso(task.date),
   reminder_at: task.reminderAt || null, recurrence_rule: task.recurrenceRule || null, list_id: task.listId || null,
   priority: priorityToDb(task.priority), pinned: Boolean(task.pinned), completed: Boolean(task.done),
   completed_at: task.completedAt || null, archived: Boolean(task.archived),
@@ -74,7 +84,7 @@ export async function updateTaskRemote(id, patch) {
   if ('pinned' in patch) row.pinned = Boolean(patch.pinned);
   if ('done' in patch) { row.completed = Boolean(patch.done); row.completed_at = patch.done ? new Date().toISOString() : null; }
   if ('archived' in patch) row.archived = Boolean(patch.archived);
-  if ('date' in patch || 'dueAt' in patch) row.due_at = patch.dueAt ?? (['today', 'tomorrow', 'upcoming'].includes(patch.date) ? null : (patch.date || null));
+  if ('date' in patch || 'dueAt' in patch) row.due_at = patch.dueAt ?? dateTokenToIso(patch.date);
   if ('reminderAt' in patch) row.reminder_at = patch.reminderAt || null;
   if ('recurrenceRule' in patch) row.recurrence_rule = patch.recurrenceRule || null;
   const session = await getSession(); const userId = session?.user?.id;
