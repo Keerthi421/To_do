@@ -84,7 +84,10 @@ export async function updateTaskRemote(id, patch) {
   if ('notes' in patch) row.notes = patch.notes || '';
   if ('priority' in patch) row.priority = priorityToDb(patch.priority);
   if ('pinned' in patch) row.pinned = Boolean(patch.pinned);
-  if ('done' in patch) { row.completed = Boolean(patch.done); row.completed_at = patch.done ? new Date().toISOString() : null; }
+  if ('done' in patch) {
+    row.completed = Boolean(patch.done);
+    row.completed_at = patch.done ? (patch.completedAt || new Date().toISOString()) : null;
+  }
   if ('archived' in patch) row.archived = Boolean(patch.archived);
   if ('date' in patch || 'dueAt' in patch) { row.due_at = patch.dueAt ?? dateTokenToIso(patch.date); row.all_day = patch.dueAt ? !patch.time : true; }
   if ('reminderAt' in patch) row.reminder_at = patch.reminderAt || null;
