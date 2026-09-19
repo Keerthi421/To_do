@@ -55,7 +55,7 @@ function App() {
   const [filter, setFilter] = useState('all');
   const [historyStatus, setHistoryStatus] = useState('all');
   const [historyRange, setHistoryRange] = useState('all');
-  useEffect(() => localStorage.setItem('anyday.tasks', JSON.stringify(tasks)), [tasks]);
+  useEffect(() => { localStorage.setItem('anyday.tasks', JSON.stringify(tasks)); window.dispatchEvent(new Event('anyday:local-change')); }, [tasks]);
   useEffect(() => { const sync = () => { try { const s = JSON.parse(localStorage.getItem('anyday.tasks') || 'null'); if (Array.isArray(s)) setTasks(s.map(normalizeTask)); } catch {} }; window.addEventListener('anyday:remote-change', sync); return () => window.removeEventListener('anyday:remote-change', sync); }, []);
   const matches = useMemo(() => tasks.filter(t => (!query || t.title.toLowerCase().includes(query.toLowerCase())) && (filter === 'all' || t.priority === filter)), [tasks, query, filter]);
   const today = startOfDay(new Date());
