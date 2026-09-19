@@ -5,8 +5,12 @@ import { requestReminderPermission, syncReminders } from './backend/reminderSche
 import { makeRecurringCopy, nextOccurrence } from './backend/recurrence';
 
 const KEY = 'anyday.tasks';
+const USER_KEY = userId => `anyday.tasks.${userId}`;
+const ACTIVE_USER_KEY = 'anyday.active-user';
 const readLocal = () => { try { const value = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
 const writeLocal = tasks => localStorage.setItem(KEY, JSON.stringify(tasks));
+const readScoped = userId => { try { const value = JSON.parse(localStorage.getItem(USER_KEY(userId)) || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
+const writeScoped = (userId, tasks) => localStorage.setItem(USER_KEY(userId), JSON.stringify(tasks));
 
 export default function CloudShell({ children }) {
   const [session, setSession] = useState(null);
@@ -32,20 +36,29 @@ export default function CloudShell({ children }) {
   }, []);
 
   async function hydrate(userId) {
+    const previousUser = localStorage.getItem(ACTIVE_USER_KEY);
+    const switchingAccount = Boolean(previousUser && previousUser !== userId);
+    const scoped = readScoped(userId);
+    const local = switchingAccount ? scoped : (scoped.length ? scoped : readLocal());
+    writeLocal(local);
+    localStorage.setItem(ACTIVE_USER_KEY, userId);
     const remote = await loadTasks();
-    const local = readLocal();
-    if (remote?.length) writeLocal(remote);
+    if (remote?.length) {
+      writeLocal(remote);
+      writeScoped(userId, remote);
+    }
     else if (local.length) {
       const demoOnly = local.every(task => typeof task.id === 'number');
-      if (demoOnly) writeLocal([]);
+      if (demoOnly) { writeLocal([]); writeScoped(userId, []); }
       else {
         for (const task of local) {
           try { const saved = await insertTask(task, userId); if (saved) known.current.set(String(task.id), saved); } catch {}
         }
         const refreshed = await loadTasks();
-        if (refreshed) writeLocal(refreshed);
+        if (refreshed) { writeLocal(refreshed); writeScoped(userId, refreshed); }
       }
     }
+    writeScoped(userId, readLocal());
     known.current = new Map(readLocal().map(t => [String(t.id), t]));
     syncReminders(readLocal());
     window.dispatchEvent(new CustomEvent('anyday:remote-change'));
@@ -90,6 +103,7 @@ export default function CloudShell({ children }) {
             if (saved) {
               const replaced = readLocal().map(t => String(t.id) === String(task.id) ? saved : t);
               writeLocal(replaced);
+              writeScoped(session.user.id, replaced);
             }
           } else if (JSON.stringify(old) !== JSON.stringify(task)) {
             await updateTaskRemote(task.id, task);
@@ -97,7 +111,11 @@ export default function CloudShell({ children }) {
               const dueAt = nextOccurrence(task);
               if (dueAt) {
                 const saved = await insertTask(makeRecurringCopy(task, dueAt), session.user.id);
-                if (saved) writeLocal([saved, ...readLocal()]);
+                if (saved) {
+                  const nextTasks = [saved, ...readLocal()];
+                  writeLocal(nextTasks);
+                  writeScoped(session.user.id, nextTasks);
+                }
               }
             }
           }
@@ -106,6 +124,7 @@ export default function CloudShell({ children }) {
           if (!current.some(t => String(t.id) === String(id))) await softDeleteTask(id);
         }
         const latest = readLocal();
+        writeScoped(session.user.id, latest);
         syncReminders(latest);
         known.current = new Map(latest.map(t => [String(t.id), t]));
       } catch (e) {
