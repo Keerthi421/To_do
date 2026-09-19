@@ -35,3 +35,26 @@ drop trigger if exists tasks_set_updated_at on public.tasks; create trigger task
 drop trigger if exists subtasks_set_updated_at on public.subtasks; create trigger subtasks_set_updated_at before update on public.subtasks for each row execute procedure public.set_updated_at();
 alter table tasks replica identity full;
 do $$ begin if not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='tasks') then alter publication supabase_realtime add table public.tasks; end if; end $$;
+
+-- Supabase Storage for task attachments.
+insert into storage.buckets (id, name, public)
+values ('task-attachments', 'task-attachments', false)
+on conflict (id) do nothing;
+
+create policy "task attachment read own files" on storage.objects
+for select using (
+  bucket_id = 'task-attachments'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+create policy "task attachment upload own files" on storage.objects
+for insert with check (
+  bucket_id = 'task-attachments'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+create policy "task attachment delete own files" on storage.objects
+for delete using (
+  bucket_id = 'task-attachments'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
