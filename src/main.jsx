@@ -3,6 +3,7 @@ import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp
 import CloudShell from './CloudShell';
 import { requestReminderPermission } from './backend/reminderScheduler';
 import { createSubtask, deleteSubtask, loadSubtasks, updateSubtask } from './backend/subtaskRepository';
+import { getAttachmentUrl, loadAttachments, removeAttachment, uploadAttachment } from './backend/attachmentRepository';
 import './styles.css';
 import './history.css';
 import './next7.css';
@@ -131,9 +132,10 @@ function TaskDetail({ task, updateTask, deleteTask, close, lists: availableLists
   const [note, setNote] = useState(task.notes || '');
   const [subtasks, setSubtasks] = useState([]);
   const [subTitle, setSubTitle] = useState('');
-  const [files, setFiles] = useState([]);
+  const [attachments, setAttachments] = useState([]);
+  const [uploading, setUploading] = useState(false);
   useEffect(() => { setNote(task.notes || ''); }, [task.id, task.notes]);
-  useEffect(() => { let live = true; loadSubtasks(task.id).then(rows => { if (live) setSubtasks(rows); }).catch(() => {}); return () => { live = false; }; }, [task.id]);
+  useEffect(() => { let live = true; Promise.all([loadSubtasks(task.id), loadAttachments(task.id)]).then(([rows, files]) => { if (live) { setSubtasks(rows); setAttachments(files); } }).catch(() => {}); return () => { live = false; }; }, [task.id]);
   const localDate = task.dueAt ? new Date(task.dueAt) : null;
   const dateValue = localDate && !Number.isNaN(localDate.getTime()) ? dateKey(localDate) : /^\d{4}-\d{2}-\d{2}$/.test(task.date || '') ? task.date : task.date === 'tomorrow' ? dateKey(addDays(new Date(), 1)) : dateKey(new Date());
   const timeValue = localDate && !Number.isNaN(localDate.getTime()) ? pad(localDate.getHours()) + ':' + pad(localDate.getMinutes()) : '';
@@ -141,6 +143,9 @@ function TaskDetail({ task, updateTask, deleteTask, close, lists: availableLists
   const setReminder = value => { if (!value) return updateTask(task.id, { reminderAt: null }); requestReminderPermission().catch(() => {}); updateTask(task.id, { reminderAt: new Date(value).toISOString() }); };
   const addSub = async e => { e.preventDefault(); if (!subTitle.trim()) return; const temp = { id: 'local-' + Date.now(), task_id: task.id, title: subTitle.trim(), completed: false, position: subtasks.length }; setSubtasks(v => [...v, temp]); setSubTitle(''); try { const row = await createSubtask(task.id, temp.title); if (row) setSubtasks(v => v.map(x => x.id === temp.id ? row : x)); } catch {} };
   const toggleSub = async s => { const next = !s.completed; setSubtasks(v => v.map(x => x.id === s.id ? { ...x, completed: next } : x)); if (!String(s.id).startsWith('local-')) try { await updateSubtask(s.id, { completed: next }); } catch {} };
+  const addFiles = async event => { const selectedFiles = Array.from(event.target.files || []); if (!selectedFiles.length) return; setUploading(true); try { for (const file of selectedFiles) { const row = await uploadAttachment(task.id, file); if (row) setAttachments(v => [row, ...v]); } } catch {} finally { setUploading(false); event.target.value = ''; } };
+  const openAttachment = async file => { try { const url = await getAttachmentUrl(file.storage_path); if (url) window.open(url, '_blank', 'noopener,noreferrer'); } catch {} };
+  const removeAttachmentItem = async file => { try { await removeAttachment(file); setAttachments(v => v.filter(x => x.id !== file.id)); } catch {} };
   const removeSub = async s => { setSubtasks(v => v.filter(x => x.id !== s.id)); if (!String(s.id).startsWith('local-')) try { await deleteSubtask(s.id); } catch {} };
   return <aside className="detail-panel"><div className="detail-top"><button onClick={close}><X size={17} /></button><div><button onClick={() => updateTask(task.id, { done: !task.done })}><Check size={15} /> {task.done ? 'Reopen' : 'Done'}</button><button onClick={() => updateTask(task.id, { pinned: !task.pinned })}><Pin size={15} /> {task.pinned ? 'Unpin' : 'Pin'}</button></div><button onClick={() => deleteTask(task.id)}><Trash2 size={17} /></button></div>
   <input className="detail-title" value={task.title} onChange={e => updateTask(task.id, { title: e.target.value })} />
@@ -152,7 +157,7 @@ function TaskDetail({ task, updateTask, deleteTask, close, lists: availableLists
   <DetailSection label="NOTES"><textarea value={note} onChange={e => setNote(e.target.value)} onBlur={() => updateTask(task.id, { notes: note })} placeholder="Add notes..." /></DetailSection>
   <DetailSection label="TAG"><select className="detail-select" value={task.tag || ''} onChange={e => updateTask(task.id, { tag: e.target.value })}><option value="">No tag</option>{availableTags.map(x => <option key={x}>{x}</option>)}</select></DetailSection>
   <DetailSection label="PRIORITY"><div className="date-options">{['none','low','medium','high'].map(p => <button key={p} className={task.priority === p ? 'chosen' : ''} onClick={() => updateTask(task.id, { priority: p })}><Flag size={13} /> {p}</button>)}</div></DetailSection>
-  <DetailSection label="ATTACHMENTS"><input type="file" multiple onChange={e => setFiles(Array.from(e.target.files || []))} /><div className="attachment"><Paperclip size={14} />{files.length ? files.length + ' file' + (files.length === 1 ? '' : 's') + ' selected locally' : <>Drop files here or <b>browse</b></>}</div></DetailSection></aside>;
+  <DetailSection label="ATTACHMENTS"><input type="file" multiple onChange={addFiles} /><div className="attachment"><Paperclip size={14} />{uploading ? 'Uploading…' : attachments.length ? attachments.length + ' file' + (attachments.length === 1 ? '' : 's') + ' attached' : <>Drop files here or <b>browse</b></>}</div>{attachments.map(file => <div className="sub-item" key={file.id}><Paperclip size={13} /><button onClick={() => openAttachment(file)} style={{ background: 'none', border: 0, color: 'inherit', cursor: 'pointer', textAlign: 'left', flex: 1 }}>{file.file_name}</button><button onClick={() => removeAttachmentItem(file)} style={{ marginLeft: 'auto', background: 'none', border: 0, color: '#777' }}><Trash2 size={13} /></button></div>)}</DetailSection></aside>;
 }function DetailSection({ label, children }) { return <div className="detail-section"><div className="detail-label">{label}</div>{children}</div>; }
 function SettingsModal({ close, dark, setDark }) { return <div className="overlay" onMouseDown={close}><div className="settings-modal" onMouseDown={e => e.stopPropagation()}><div className="settings-head"><h2>Settings</h2><button onClick={close}><X size={18} /></button></div><div className="setting-row"><div><strong>Dark mode</strong><span>Use the dark AnyDay workspace.</span></div><button className="toggle" onClick={() => setDark(v => !v)}>{dark ? 'On' : 'Off'}</button></div><div className="setting-row"><div><strong>Complete task history</strong><span>AnyDay keeps tasks entered on previous days.</span></div><span className="setting-value">Always on</span></div><div className="setting-row"><div><strong>Notifications</strong><span>Reminder and calendar notifications.</span></div><span className="setting-value">Enabled</span></div></div></div>; }
 
