@@ -17,11 +17,12 @@ const taskSelect = 'id,title,notes,due_at,reminder_at,recurrence_rule,list_id,pr
 const toClientTask = row => ({
   id: row.id, title: row.title, notes: row.notes || '',
   date: row.due_at ? row.due_at.slice(0, 10) : 'upcoming',
-  time: row.due_at && row.due_at.length >= 16 ? new Date(row.due_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '',
+  time: row.all_day ? '' : (row.due_at && row.due_at.length >= 16 ? new Date(row.due_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''),
   dueAt: row.due_at || null, reminderAt: row.reminder_at || null, recurrenceRule: row.recurrence_rule || '',
   list: row.lists?.name || row.list_id || 'Personal', listId: row.list_id || null,
   tag: row.task_tags?.[0]?.tags?.name || '', priority: priorityFromDb(row.priority), pinned: Boolean(row.pinned),
   done: Boolean(row.completed), archived: Boolean(row.archived), createdAt: row.created_at, updatedAt: row.updated_at, completedAt: row.completed_at,
+  allDay: row.all_day !== false,
 });
 
 const toRow = task => ({
@@ -29,7 +30,8 @@ const toRow = task => ({
   due_at: task.dueAt || dateTokenToIso(task.date),
   reminder_at: task.reminderAt || null, recurrence_rule: task.recurrenceRule || null, list_id: task.listId || null,
   priority: priorityToDb(task.priority), pinned: Boolean(task.pinned), completed: Boolean(task.done),
-  completed_at: task.completedAt || null, archived: Boolean(task.archived),
+  completed_at: task.completedAt || null,
+  all_day: task.allDay ?? (!task.time), archived: Boolean(task.archived),
 });
 
 export async function getSession() { if (!supabaseEnabled) return null; const { data, error } = await supabase.auth.getSession(); if (error) throw error; return data.session; }
@@ -84,7 +86,7 @@ export async function updateTaskRemote(id, patch) {
   if ('pinned' in patch) row.pinned = Boolean(patch.pinned);
   if ('done' in patch) { row.completed = Boolean(patch.done); row.completed_at = patch.done ? new Date().toISOString() : null; }
   if ('archived' in patch) row.archived = Boolean(patch.archived);
-  if ('date' in patch || 'dueAt' in patch) row.due_at = patch.dueAt ?? dateTokenToIso(patch.date);
+  if ('date' in patch || 'dueAt' in patch) { row.due_at = patch.dueAt ?? dateTokenToIso(patch.date); row.all_day = patch.dueAt ? !patch.time : true; }
   if ('reminderAt' in patch) row.reminder_at = patch.reminderAt || null;
   if ('recurrenceRule' in patch) row.recurrence_rule = patch.recurrenceRule || null;
   const session = await getSession(); const userId = session?.user?.id;
