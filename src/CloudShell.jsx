@@ -3,7 +3,6 @@ import { getSession, signInWithEmail, signUpWithEmail, signOut, loadTasks, inser
 import { supabaseEnabled } from './backend/supabase';
 import { requestReminderPermission, syncReminders } from './backend/reminderScheduler';
 import { makeRecurringCopy, nextOccurrence } from './backend/recurrence';
-import CompleteApp from './CompleteApp';
 
 const KEY = 'anyday.tasks';
 const readLocal = () => { try { const value = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
@@ -122,7 +121,7 @@ export default function CloudShell({ children }) {
 
   if (supabaseEnabled && !ready) return <div style={screenStyle}><div style={cardStyle}><h1>AnyDay</h1><p>Connecting your task workspace…</p></div></div>;
   if (supabaseEnabled && !session) return <div style={screenStyle}><form onSubmit={submit} style={cardStyle}><div style={{fontSize:12,fontWeight:700,letterSpacing:2,textTransform:'uppercase',opacity:.6}}>AnyDay</div><h1 style={{margin:'8px 0 6px'}}>Your day, organized.</h1><p style={{opacity:.7}}>Sign in to keep your complete task history synced across devices.</p><input required type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} style={inputStyle}/><input required minLength={6} type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} style={inputStyle}/>{error&&<div style={{color:'#ff8e8e',fontSize:13}}>{error}</div>}<button disabled={busy} style={buttonStyle}>{busy?'Please wait…':authMode==='signin'?'Sign in':'Create account'}</button><button type="button" onClick={()=>{setAuthMode(v=>v==='signin'?'signup':'signin');setError('')}} style={linkButtonStyle}>{authMode==='signin'?'Create a free account':'Already have an account? Sign in'}</button></form></div>;
-  return <div style={{minHeight:'100vh'}}><CompleteApp/><button onClick={async()=>{await signOut();setSession(null)}} style={signOutStyle}>Sign out</button></div>;
+  return <div style={{minHeight:'100vh'}}>{children}<button onClick={async()=>{await signOut();setSession(null)}} style={signOutStyle}>Sign out</button></div>;
 }
 
 const screenStyle={minHeight:'100vh',display:'grid',placeItems:'center',background:'#141618',color:'#f7f2e9',fontFamily:'Inter,system-ui,sans-serif',padding:24};
