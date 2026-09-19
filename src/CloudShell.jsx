@@ -75,10 +75,12 @@ export default function CloudShell({ children }) {
 
   useEffect(() => {
     if (!session) return;
-    const timer = setInterval(async () => {
-      if (syncing.current) return;
+    let live = true;
+    const flush = async () => {
+      if (!live || syncing.current) return;
       const current = readLocal();
       const previous = known.current;
+      if (!current.length && !previous.size) return;
       syncing.current = true;
       try {
         for (const task of current) {
@@ -100,13 +102,29 @@ export default function CloudShell({ children }) {
             }
           }
         }
-        for (const [id] of previous) if (!current.some(t => String(t.id) === String(id))) await softDeleteTask(id);
-        syncReminders(readLocal());
-        known.current = new Map(readLocal().map(t => [String(t.id), t]));
-      } catch (e) { setError(e.message); }
-      finally { syncing.current = false; }
-    }, 5000);
-    return () => clearInterval(timer);
+        for (const [id] of previous) {
+          if (!current.some(t => String(t.id) === String(id))) await softDeleteTask(id);
+        }
+        const latest = readLocal();
+        syncReminders(latest);
+        known.current = new Map(latest.map(t => [String(t.id), t]));
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        syncing.current = false;
+      }
+    };
+    const onLocalChange = () => { flush(); };
+    window.addEventListener('anyday:local-change', onLocalChange);
+    window.addEventListener('storage', onLocalChange);
+    const safetyTimer = setInterval(flush, 15000);
+    flush();
+    return () => {
+      live = false;
+      clearInterval(safetyTimer);
+      window.removeEventListener('anyday:local-change', onLocalChange);
+      window.removeEventListener('storage', onLocalChange);
+    };
   }, [session]);
 
   async function submit(e) {
