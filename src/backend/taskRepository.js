@@ -12,13 +12,14 @@ const dateTokenToIso = value => {
   }
   return null;
 };
-const taskSelect = 'id,title,notes,due_at,reminder_at,recurrence_rule,list_id,priority,pinned,completed,completed_at,archived,all_day,created_at,updated_at,lists(name),task_tags(tags(name))';
+const taskSelect = 'id,title,notes,due_at,reminder_at,recurrence_rule,recurrence_parent_id,list_id,priority,pinned,completed,completed_at,archived,all_day,created_at,updated_at,lists(name),task_tags(tags(name))';
 
 const toClientTask = row => ({
   id: row.id, title: row.title, notes: row.notes || '',
   date: row.due_at ? row.due_at.slice(0, 10) : 'upcoming',
   time: row.all_day ? '' : (row.due_at && row.due_at.length >= 16 ? new Date(row.due_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''),
   dueAt: row.due_at || null, reminderAt: row.reminder_at || null, recurrenceRule: row.recurrence_rule || '',
+  recurrenceParentId: row.recurrence_parent_id || null,
   list: row.lists?.name || row.list_id || 'Personal', listId: row.list_id || null,
   tag: row.task_tags?.[0]?.tags?.name || '', priority: priorityFromDb(row.priority), pinned: Boolean(row.pinned),
   done: Boolean(row.completed), archived: Boolean(row.archived), createdAt: row.created_at, updatedAt: row.updated_at, completedAt: row.completed_at,
@@ -28,10 +29,10 @@ const toClientTask = row => ({
 const toRow = task => ({
   title: task.title, notes: task.notes || '',
   due_at: task.dueAt || dateTokenToIso(task.date),
-  reminder_at: task.reminderAt || null, recurrence_rule: task.recurrenceRule || null, list_id: task.listId || null,
+  reminder_at: task.reminderAt || null, recurrence_rule: task.recurrenceRule || null,
+  recurrence_parent_id: task.recurrenceParentId || null, list_id: task.listId || null,
   priority: priorityToDb(task.priority), pinned: Boolean(task.pinned), completed: Boolean(task.done),
-  completed_at: task.completedAt || null,
-  all_day: task.allDay ?? (!task.time), archived: Boolean(task.archived),
+  completed_at: task.completedAt || null, all_day: task.allDay ?? (!task.time), archived: Boolean(task.archived),
 });
 
 export async function getSession() { if (!supabaseEnabled) return null; const { data, error } = await supabase.auth.getSession(); if (error) throw error; return data.session; }
@@ -69,14 +70,39 @@ export async function loadTasks() {
   if (error) throw error;
   return (data || []).map(toClientTask);
 }
+
 export async function insertTask(task, userId) {
   if (!supabaseEnabled || !userId) return null;
-  const row = toRow(task); if (!row.list_id && task.list) row.list_id = await resolveListId(task.list, userId);
+  const row = toRow(task);
+  if (!row.list_id && task.list) row.list_id = await resolveListId(task.list, userId);
   const { data, error } = await supabase.from('tasks').insert({ ...row, user_id: userId }).select(taskSelect).single();
   if (error) throw error;
   if (task.tag) await syncTaskTag(data.id, task.tag, userId);
   return toClientTask({ ...data, task_tags: task.tag ? [{ tags: { name: task.tag } }] : data.task_tags });
 }
+
+export async function insertRecurringTask(task, userId, parentId, dueAt) {
+  if (!supabaseEnabled || !userId || !parentId || !dueAt) return null;
+  const row = toRow({ ...task, recurrenceParentId: parentId, dueAt });
+  if (!row.list_id && task.list) row.list_id = await resolveListId(task.list, userId);
+  const { data: existing, error: findError } = await supabase.from('tasks').select(taskSelect)
+    .eq('user_id', userId).eq('recurrence_parent_id', parentId).eq('due_at', dueAt).maybeSingle();
+  if (findError) throw findError;
+  if (existing) return toClientTask(existing);
+  const { data, error } = await supabase.from('tasks').insert({ ...row, user_id: userId }).select(taskSelect).single();
+  if (error) {
+    if (error.code === '23505') {
+      const { data: concurrent, error: concurrentError } = await supabase.from('tasks').select(taskSelect)
+        .eq('user_id', userId).eq('recurrence_parent_id', parentId).eq('due_at', dueAt).maybeSingle();
+      if (concurrentError) throw concurrentError;
+      if (concurrent) return toClientTask(concurrent);
+    }
+    throw error;
+  }
+  if (task.tag) await syncTaskTag(data.id, task.tag, userId);
+  return toClientTask({ ...data, task_tags: task.tag ? [{ tags: { name: task.tag } }] : data.task_tags });
+}
+
 export async function updateTaskRemote(id, patch) {
   if (!supabaseEnabled) return null;
   const row = {};
@@ -84,10 +110,7 @@ export async function updateTaskRemote(id, patch) {
   if ('notes' in patch) row.notes = patch.notes || '';
   if ('priority' in patch) row.priority = priorityToDb(patch.priority);
   if ('pinned' in patch) row.pinned = Boolean(patch.pinned);
-  if ('done' in patch) {
-    row.completed = Boolean(patch.done);
-    row.completed_at = patch.done ? (patch.completedAt || new Date().toISOString()) : null;
-  }
+  if ('done' in patch) { row.completed = Boolean(patch.done); row.completed_at = patch.done ? (patch.completedAt || new Date().toISOString()) : null; }
   if ('archived' in patch) row.archived = Boolean(patch.archived);
   if ('date' in patch || 'dueAt' in patch) { row.due_at = patch.dueAt ?? dateTokenToIso(patch.date); row.all_day = patch.dueAt ? !patch.time : true; }
   if ('reminderAt' in patch) row.reminder_at = patch.reminderAt || null;
