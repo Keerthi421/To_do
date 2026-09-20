@@ -4,13 +4,15 @@ create extension if not exists pgcrypto;
 create table if not exists profiles (id uuid primary key references auth.users(id) on delete cascade, display_name text, timezone text not null default 'Asia/Kolkata', created_at timestamptz not null default now(), updated_at timestamptz not null default now());
 create table if not exists lists (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, name text not null, color text, created_at timestamptz not null default now(), unique(user_id,name));
 create table if not exists tags (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, name text not null, created_at timestamptz not null default now(), unique(user_id,name));
-create table if not exists tasks (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, list_id uuid references lists(id) on delete set null, title text not null check(length(trim(title))>0), notes text not null default '', due_at timestamptz, reminder_at timestamptz, recurrence_rule text, priority smallint not null default 0 check(priority between 0 and 3), pinned boolean not null default false, completed boolean not null default false, completed_at timestamptz, all_day boolean not null default true, archived boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
+create table if not exists tasks (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, list_id uuid references lists(id) on delete set null, title text not null check(length(trim(title))>0), notes text not null default '', due_at timestamptz, reminder_at timestamptz, recurrence_rule text, recurrence_parent_id uuid references tasks(id) on delete set null, priority smallint not null default 0 check(priority between 0 and 3), pinned boolean not null default false, completed boolean not null default false, completed_at timestamptz, all_day boolean not null default true, archived boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
 alter table tasks add column if not exists archived boolean not null default false;
 alter table tasks add column if not exists all_day boolean not null default true;
+alter table tasks add column if not exists recurrence_parent_id uuid references tasks(id) on delete set null;
 create table if not exists task_tags (task_id uuid not null references tasks(id) on delete cascade, tag_id uuid not null references tags(id) on delete cascade, primary key(task_id,tag_id));
 create table if not exists subtasks (id uuid primary key default gen_random_uuid(), task_id uuid not null references tasks(id) on delete cascade, title text not null, completed boolean not null default false, position integer not null default 0, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
 create table if not exists task_attachments (id uuid primary key default gen_random_uuid(), task_id uuid not null references tasks(id) on delete cascade, file_name text not null, storage_path text not null, mime_type text, size_bytes bigint, created_at timestamptz not null default now());
 create table if not exists calendar_connections (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, provider text not null check(provider in('google','outlook','icloud')), external_account_id text, encrypted_credentials text, enabled boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique(user_id,provider));
+create unique index if not exists tasks_recurrence_instance_idx on tasks(user_id,recurrence_parent_id,due_at) where recurrence_parent_id is not null;
 create index if not exists tasks_user_created_idx on tasks(user_id,created_at desc);
 create index if not exists tasks_user_due_idx on tasks(user_id,due_at);
 create index if not exists tasks_user_completed_idx on tasks(user_id,completed,created_at desc);
@@ -41,20 +43,14 @@ insert into storage.buckets (id, name, public)
 values ('task-attachments', 'task-attachments', false)
 on conflict (id) do nothing;
 
+drop policy if exists "task attachment read own files" on storage.objects;
 create policy "task attachment read own files" on storage.objects
-for select using (
-  bucket_id = 'task-attachments'
-  and (storage.foldername(name))[1] = auth.uid()::text
-);
+for select using (bucket_id = 'task-attachments' and (storage.foldername(name))[1] = auth.uid()::text);
 
+drop policy if exists "task attachment upload own files" on storage.objects;
 create policy "task attachment upload own files" on storage.objects
-for insert with check (
-  bucket_id = 'task-attachments'
-  and (storage.foldername(name))[1] = auth.uid()::text
-);
+for insert with check (bucket_id = 'task-attachments' and (storage.foldername(name))[1] = auth.uid()::text);
 
+drop policy if exists "task attachment delete own files" on storage.objects;
 create policy "task attachment delete own files" on storage.objects
-for delete using (
-  bucket_id = 'task-attachments'
-  and (storage.foldername(name))[1] = auth.uid()::text
-);
+for delete using (bucket_id = 'task-attachments' and (storage.foldername(name))[1] = auth.uid()::text);
