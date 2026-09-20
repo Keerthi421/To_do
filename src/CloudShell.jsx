@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { getSession, signInWithEmail, signUpWithEmail, signOut, loadTasks, insertTask, updateTaskRemote, softDeleteTask, subscribeToTasks } from './backend/taskRepository';
+import { getSession, signInWithEmail, signUpWithEmail, signOut, loadTasks, insertTask, insertRecurringTask, updateTaskRemote, softDeleteTask, subscribeToTasks } from './backend/taskRepository';
 import { supabase, supabaseEnabled } from './backend/supabase';
 import { requestReminderPermission, syncReminders } from './backend/reminderScheduler';
 import { makeRecurringCopy, nextOccurrence } from './backend/recurrence';
@@ -49,8 +49,6 @@ export default function CloudShell({ children }) {
     const previousUser = localStorage.getItem(ACTIVE_USER_KEY);
     const switchingAccount = Boolean(previousUser && previousUser !== userId);
     const scoped = readScoped(userId);
-    // Only migrate the legacy global cache before any account has ever been selected.
-    // Once an account exists, a new account must start from its own scoped cache/remote data.
     const local = scoped.length ? scoped : (!previousUser && !switchingAccount ? readLocal() : []);
     writeLocal(local);
     localStorage.setItem(ACTIVE_USER_KEY, userId);
@@ -122,8 +120,9 @@ export default function CloudShell({ children }) {
             if (!old.done && task.done && task.recurrenceRule) {
               const dueAt = nextOccurrence(task);
               if (dueAt) {
-                const saved = await insertTask(makeRecurringCopy(task, dueAt), session.user.id);
-                if (saved) {
+                const recurringTask = makeRecurringCopy(task, dueAt);
+                const saved = await insertRecurringTask(recurringTask, session.user.id, task.id, dueAt);
+                if (saved && !current.some(t => String(t.id) === String(saved.id))) {
                   const nextTasks = [saved, ...readLocal()];
                   writeLocal(nextTasks);
                   writeScoped(session.user.id, nextTasks);
