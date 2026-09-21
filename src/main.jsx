@@ -155,7 +155,8 @@ function downloadCalendarIcs(tasks) {
   link.remove();
   URL.revokeObjectURL(url);
 }
-\nfunction Calendar({ tasks, selectTask }) {
+
+function Calendar({ tasks, selectTask }) {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const today = startOfDay(new Date());
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
