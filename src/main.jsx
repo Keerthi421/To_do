@@ -123,14 +123,46 @@ function InlineAdd({ date, onAdd }) { const [value, setValue] = useState(''); co
 
 function GenericView({ view, tasks, allTasks, toggleTask, selectTask, addTask, newTask, setNewTask, historyStatus, setHistoryStatus, historyRange, setHistoryRange }) { const title = view === 'all' ? 'All my tasks' : view.startsWith('list:') ? view.slice(5) : view.startsWith('tag:') ? '#' + view.slice(4) : 'My tasks'; return <><div className="generic-head"><div><h1>{title}</h1><p>{view === 'all' ? `${allTasks.length} task${allTasks.length === 1 ? '' : 's'} stored in your complete history` : 'Plan, organize and get things done.'}</p></div><button onClick={() => setHistoryStatus(v => v === 'all' ? 'active' : 'all')}><Filter size={17} /></button></div>{view === 'all' ? <AllTasksHistory tasks={tasks} toggleTask={toggleTask} selectTask={selectTask} status={historyStatus} setStatus={setHistoryStatus} range={historyRange} setRange={setHistoryRange} /> : <TaskList tasks={tasks} toggleTask={toggleTask} selectTask={selectTask} />}<QuickAdd addTask={addTask} newTask={newTask} setNewTask={setNewTask} /></>; }
 function AllTasksHistory({ tasks, toggleTask, selectTask, status, setStatus, range, setRange }) { const today = startOfDay(new Date()), filtered = tasks.filter(t => { if (status === 'active' && t.done) return false; if (status === 'completed' && !t.done) return false; if (range !== 'all') { const days = range === '7' ? 7 : range === '30' ? 30 : 365, cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - days + 1); if (new Date(t.createdAt) < cutoff) return false; } return true; }), grouped = filtered.reduce((a, t) => { const k = historyDateKey(t.createdAt || t.updatedAt); (a[k] || []).push(t); return a; }, {}), groups = Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a)); return <div className="all-history"><div className="history-summary"><span><CheckCircle2 size={16} /> All entered tasks</span><strong>{filtered.length}</strong><span className="history-done">{filtered.filter(t => t.done).length} completed</span></div><div className="history-controls"><div className="history-control-group"><button className={status === 'all' ? 'selected' : ''} onClick={() => setStatus('all')}>All</button><button className={status === 'active' ? 'selected' : ''} onClick={() => setStatus('active')}>Active</button><button className={status === 'completed' ? 'selected' : ''} onClick={() => setStatus('completed')}>Completed</button></div><select value={range} onChange={e => setRange(e.target.value)}><option value="all">All time</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="365">Last year</option></select></div>{!groups.length ? <div className="history-empty"><CheckCircle2 size={34} /><h3>No matching tasks</h3><p>Your complete history is preserved; adjust the filters to see older entries.</p></div> : groups.map(([k, ts]) => <section className="history-group" key={k}><div className="history-heading"><span>{historyDateLabel(k)}</span><em>{ts.length}</em></div>{ts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(t => <TaskRow key={t.id} task={t} toggleTask={toggleTask} selectTask={selectTask} />)}</section>)}</div>; }
-function Calendar({ tasks, selectTask }) {
+function downloadCalendarIcs(tasks) {
+  const escape = value => String(value || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  const formatUtc = value => {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().replace(/[-:]/g, '').replace(/\\.\\d{3}Z$/, 'Z');
+  };
+  const events = (tasks || []).filter(t => t.dueAt || /^\\d{4}-\\d{2}-\\d{2}$/.test(t.date || ''));
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//AnyDay//Task Calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  for (const task of events) {
+    const start = task.dueAt ? formatUtc(task.dueAt) : formatUtc(task.date + 'T09:00:00');
+    if (!start) continue;
+    lines.push('BEGIN:VEVENT');
+    lines.push('UID:' + escape(task.id) + '@anyday');
+    lines.push('DTSTAMP:' + formatUtc(task.createdAt || new Date().toISOString()));
+    lines.push('DTSTART:' + start);
+    lines.push('SUMMARY:' + escape(task.title));
+    if (task.notes) lines.push('DESCRIPTION:' + escape(task.notes));
+    if (task.done) lines.push('STATUS:COMPLETED');
+    lines.push('END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  const blob = new Blob([lines.join('\\r\\n') + '\\r\\n'], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'anyday-tasks.ics';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+\nfunction Calendar({ tasks, selectTask }) {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const today = startOfDay(new Date());
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
   const offset = (first.getDay() + 6) % 7;
   const total = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const cells = Math.ceil((offset + total) / 7) * 7;
-  return <div className="calendar-view"><div className="generic-head"><div><h1>My Calendar</h1><p>Tasks are placed on their real due dates.</p></div><div className="month-nav"><button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={17} /></button><strong>{month.toLocaleString('en-US', { month: 'long', year: 'numeric' })}</strong><button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={17} /></button></div></div><div className="calendar-grid">{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x => <div className="calendar-day-name" key={x}>{x}</div>)}{Array.from({ length: cells }, (_, i) => { const n = i - offset + 1; const d = new Date(month.getFullYear(), month.getMonth(), n); const inside = n >= 1 && n <= total; const items = inside ? tasks.filter(t => taskDateKey(t, today) === dateKey(d)) : []; return <div className={'calendar-cell ' + (inside && dateKey(d) === dateKey(today) ? 'today' : '')} key={i}><b>{inside ? n : ''}</b>{items.slice(0, 3).map(t => <button className="calendar-task" key={t.id} onClick={() => selectTask(t.id)}>{t.title}</button>)}</div>; })}</div></div>;
+  return <div className="calendar-view"><div className="generic-head"><div><h1>My Calendar</h1><p>Tasks are placed on their real due dates.</p></div><div className="month-nav"><button onClick={() => downloadCalendarIcs(tasks)} title="Export all tasks as an iCalendar file">Export</button><button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={17} /></button><strong>{month.toLocaleString('en-US', { month: 'long', year: 'numeric' })}</strong><button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={17} /></button></div></div><div className="calendar-grid">{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x => <div className="calendar-day-name" key={x}>{x}</div>)}{Array.from({ length: cells }, (_, i) => { const n = i - offset + 1; const d = new Date(month.getFullYear(), month.getMonth(), n); const inside = n >= 1 && n <= total; const items = inside ? tasks.filter(t => taskDateKey(t, today) === dateKey(d)) : []; return <div className={'calendar-cell ' + (inside && dateKey(d) === dateKey(today) ? 'today' : '')} key={i}><b>{inside ? n : ''}</b>{items.slice(0, 3).map(t => <button className="calendar-task" key={t.id} onClick={() => selectTask(t.id)}>{t.title}</button>)}</div>; })}</div></div>;
 }
 
 function TaskDetail({ task, updateTask, deleteTask, close, lists: availableLists, tags: availableTags }) {
