@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createRoot } from 'react-dom/client';
 import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Clock3, Filter, Flag, Folder, Inbox, Menu, MoreHorizontal, Plus, Search, Settings, Sparkles, Tag, Target, Trash2, X, SlidersHorizontal, RefreshCw, Headphones, Paperclip, Pin, CheckCircle2, Repeat2 } from 'lucide-react';
 import CloudShell from './CloudShell';
 import { requestReminderPermission } from './backend/reminderScheduler';
@@ -145,7 +146,7 @@ function downloadCalendarIcs(tasks) {
     lines.push('END:VEVENT');
   }
   lines.push('END:VCALENDAR');
-  const blob = new Blob([lines.join('\\r\\n') + '\\r\\n'], { type: 'text/calendar;charset=utf-8' });
+  const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
