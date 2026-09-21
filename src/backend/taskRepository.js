@@ -66,9 +66,26 @@ async function syncTaskTag(taskId, tagName, userId) {
 
 export async function loadTasks() {
   if (!supabaseEnabled) return null;
-  const { data, error } = await supabase.from('tasks').select(taskSelect).is('deleted_at', null).order('created_at', { ascending: false });
-  if (error) throw error;
-  return (data || []).map(toClientTask);
+
+  // Keep the complete task history while avoiding an unbounded single response.
+  // Supabase/PostgREST can cap large responses, so fetch deterministic pages until
+  // the final page is smaller than the batch size.
+  const pageSize = 500;
+  const allRows = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select(taskSelect)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    const rows = data || [];
+    allRows.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+  return allRows.map(toClientTask);
 }
 
 export async function insertTask(task, userId) {
