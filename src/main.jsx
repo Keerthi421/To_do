@@ -128,9 +128,9 @@ function downloadCalendarIcs(tasks) {
   const formatUtc = value => {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return null;
-    return d.toISOString().replace(/[-:]/g, '').replace(/\\.\\d{3}Z$/, 'Z');
+    return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
   };
-  const events = (tasks || []).filter(t => t.dueAt || /^\\d{4}-\\d{2}-\\d{2}$/.test(t.date || ''));
+  const events = (tasks || []).filter(t => t.dueAt || /^\d{4}-\d{2}-\d{2}$/.test(t.date || ''));
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//AnyDay//Task Calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
   for (const task of events) {
     const start = task.dueAt ? formatUtc(task.dueAt) : formatUtc(task.date + 'T09:00:00');
