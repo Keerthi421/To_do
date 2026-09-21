@@ -43,12 +43,16 @@ export async function uploadAttachment(taskId, file) {
 
 export async function removeAttachment(attachment) {
   if (!supabaseEnabled || !attachment?.id) return;
-  const { error } = await supabase.from('task_attachments').delete().eq('id', attachment.id);
-  if (error) throw error;
+
+  // Remove the object first. If storage deletion fails, keep the metadata row
+  // so the attachment remains recoverable instead of silently orphaning it.
   if (attachment.storage_path) {
     const { error: storageError } = await supabase.storage.from(BUCKET).remove([attachment.storage_path]);
     if (storageError) throw storageError;
   }
+
+  const { error } = await supabase.from('task_attachments').delete().eq('id', attachment.id);
+  if (error) throw error;
 }
 
 export async function getAttachmentUrl(storagePath) {
