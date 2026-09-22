@@ -87,7 +87,7 @@ function App() {
     const task = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: title.trim(), date: dateKey(d), time: '', list: 'Personal', tag: '', priority: 'none', pinned: false, done: false, notes: '', createdAt: ts, updatedAt: ts, completedAt: null };
     setTasks(v => [task, ...v]);
   };
-  const updateTask = (id, patch) => setTasks(v => v.map(t => t.id === id ? { ...t, ...patch, updatedAt: nowIso() } : t));
+  const updateTask = (id, patch) => setTasks(v => v.map(t => { if (t.id !== id) return t; const next = { ...t, ...patch }; if (patch.done !== undefined && patch.done !== t.done) next.completedAt = patch.done ? nowIso() : null; return { ...next, updatedAt: nowIso() }; }));
   const toggleTask = id => setTasks(v => v.map(t => { if (t.id !== id) return t; const done = !t.done, ts = nowIso(); return { ...t, done, completedAt: done ? ts : null, updatedAt: ts }; }));
   const deleteTask = id => { setTasks(v => v.filter(t => t.id !== id)); setSelected(null); };
   return <div className={dark ? 'app dark' : 'app'}>
