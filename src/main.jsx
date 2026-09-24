@@ -54,7 +54,7 @@ function App() {
   const [suggestions, setSuggestions] = useState(true);
   const [settings, setSettings] = useState(false);
   const [notice, setNotice] = useState(true);
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [filter, setFilter] = useState('all');
